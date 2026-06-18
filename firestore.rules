@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Registrations rule
+    match /registrations/{registrationId} {
+      allow create: if request.resource.data.fullName is string && 
+                    request.resource.data.fullName.size() <= 200 &&
+                    request.resource.data.email is string &&
+                    request.resource.data.email.size() <= 200 &&
+                    request.resource.data.city is string;
+      // Allow read/write for verified accounts if the user sets up admin profiles
+      allow read, write: if request.auth != null;
+    }
+
+    // Vendors rule
+    match /vendors/{vendorId} {
+      allow create: if request.resource.data.businessName is string &&
+                    request.resource.data.businessName.size() <= 200 &&
+                    request.resource.data.contactPerson is string &&
+                    request.resource.data.email is string;
+      allow read, write: if request.auth != null;
+    }
+
+    // Subscribers rule
+    match /subscribers/{subscriberId} {
+      allow create: if request.resource.data.email is string &&
+                    request.resource.data.email.size() <= 200;
+      allow read, write: if request.auth != null;
+    }
+
+    // Analytics dashboard rule
+    match /analytics/dashboard {
+      allow read, write: if true; // Public access for live statistics calculations
+    }
+  }
+}

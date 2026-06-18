@@ -1,0 +1,72 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+export interface AttendeeRegistration {
+  id: string;
+  createdAt: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  ageGroup: 'Under 18' | '18-24' | '25-34' | '35-44' | '45+';
+  gender?: 'Male' | 'Female' | 'Non-binary' | 'Prefer not to say';
+  city: string;
+  attendanceLikelihood: 'Definitely' | 'Probably' | 'Maybe';
+  groupSize: 'Just Me' | '2-3 People' | '4-6 People' | 'More than 6';
+  travelDistance: 'Within my city' | 'Less than 100 km' | 'More than 100 km' | 'From another country';
+  referralSource: 'TikTok' | 'Instagram' | 'Facebook' | 'WhatsApp' | 'Friend' | 'Other';
+  interests: string[]; // ['gaming', 'car_meet', 'live_music', etc.]
+  approximateSpend: 'Under P200' | 'P200–P500' | 'P500–P1000' | 'Over P1000';
+  vipInterest: 'Yes' | 'Maybe' | 'No';
+  merchInterest: 'Yes' | 'Maybe' | 'No';
+  earlyTicketAccess: 'Yes' | 'No';
+  
+  // Conditionally added if "gaming" selected
+  gamingDetails?: {
+    platform: 'PC' | 'PlayStation' | 'Xbox' | 'Nintendo' | 'Mobile';
+    favoriteGames: string;
+    participateInTournaments: 'Yes' | 'No' | 'Maybe';
+    preferredCategories: string[]; // ['fighting', 'racing', etc.]
+  };
+
+  // Conditionally added if "car_meet" selected
+  carDetails?: {
+    vehicleMake: string;
+    vehicleModel: string;
+    year: string;
+    buildType: string; // e.g. Stance, Performance, Muscle, Classic, OEM+
+    modifications: string;
+    displayVehicle: 'Yes' | 'No';
+    enterCompetitions: 'Yes' | 'No';
+    photoUrl?: string; // Base64 or uploaded URL
+  };
+}
+
+export interface VendorApplication {
+  id: string;
+  createdAt: string;
+  businessName: string;
+  contactPerson: string;
+  contactNumber: string;
+  email: string;
+  category: 'Food & Drinks' | 'Gaming Merch / Accessories' | 'Apparel/Lifestyle' | 'Automotive' | 'Tech/Exhibition' | 'Art & Crafts' | 'Other';
+  productsOrServices: string;
+  socialMediaLinks: string;
+  stallSize: 'Small (3m x 3m)' | 'Medium (6m x 3m)' | 'Large Custom Space';
+  electricityRequired: 'Yes' | 'No';
+  additionalRequests: string;
+}
+
+export interface NewsletterSubscriber {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface AppAnalytics {
+  visitors: number;
+  clicks: { [buttonId: string]: number };
+  deviceTypes: { mobile: number; desktop: number; tablet: number };
+  trafficSources: { [source: string]: number };
+}

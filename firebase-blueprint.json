@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "AttendeeRegistration": {
+      "title": "AttendeeRegistration",
+      "description": "Demographic, interest, and vehicle/gaming spec info for potential PlayFest 2026 attendees.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique registration ID"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when registry occurred"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full legal or preferred name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Active email contact address"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Contact cellular number"
+        },
+        "ageGroup": {
+          "type": "string",
+          "enum": ["Under 18", "18-24", "25-34", "35-44", "45+"]
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["Male", "Female", "Non-binary", "Prefer not to say"]
+        },
+        "city": {
+          "type": "string",
+          "description": "Town or city of residence within Botswana"
+        },
+        "attendanceLikelihood": {
+          "type": "string",
+          "enum": ["Definitely", "Probably", "Maybe"]
+        },
+        "groupSize": {
+          "type": "string",
+          "enum": ["Just Me", "2-3 People", "4-6 People", "More than 6"]
+        },
+        "travelDistance": {
+          "type": "string",
+          "enum": ["Within my city", "Less than 100 km", "More than 100 km", "From another country"]
+        },
+        "referralSource": {
+          "type": "string",
+          "enum": ["TikTok", "Instagram", "Facebook", "WhatsApp", "Friend", "Other"]
+        },
+        "interests": {
+          "type": "array",
+          "description": "Selections in Attractions array"
+        },
+        "approximateSpend": {
+          "type": "string",
+          "enum": ["Under P200", "P200–P500", "P500–P1000", "Over P1000"]
+        },
+        "vipInterest": {
+          "type": "string",
+          "enum": ["Yes", "Maybe", "No"]
+        },
+        "merchInterest": {
+          "type": "string",
+          "enum": ["Yes", "Maybe", "No"]
+        },
+        "earlyTicketAccess": {
+          "type": "string",
+          "enum": ["Yes", "No"]
+        }
+      },
+      "required": ["id", "createdAt", "fullName", "email", "phoneNumber", "ageGroup", "city", "attendanceLikelihood", "groupSize", "travelDistance", "referralSource", "interests", "approximateSpend", "vipInterest", "merchInterest", "earlyTicketAccess"]
+    },
+    "VendorApplication": {
+      "title": "VendorApplication",
+      "description": "Spec details for local exhibitors, food trucks, and experience providers.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "businessName": {
+          "type": "string"
+        },
+        "contactPerson": {
+          "type": "string"
+        },
+        "contactNumber": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Food & Drinks", "Gaming Merch / Accessories", "Apparel/Lifestyle", "Automotive", "Tech/Exhibition", "Art & Crafts", "Other"]
+        },
+        "productsOrServices": {
+          "type": "string"
+        },
+        "socialMediaLinks": {
+          "type": "string"
+        },
+        "stallSize": {
+          "type": "string",
+          "enum": ["Small (3m x 3m)", "Medium (6m x 3m)", "Large Custom Space"]
+        },
+        "electricityRequired": {
+          "type": "string",
+          "enum": ["Yes", "No"]
+        },
+        "additionalRequests": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "createdAt", "businessName", "contactPerson", "contactNumber", "email", "category", "productsOrServices", "stallSize", "electricityRequired"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Simple email waiting list signup entity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/registrations/{registrationId}": {
+      "schema": "AttendeeRegistration",
+      "description": "Collection of all public intent registrations for PlayFest 2026."
+    },
+    "/vendors/{vendorId}": {
+      "schema": "VendorApplication",
+      "description": "Stalls and commercial exhibits applications."
+    },
+    "/subscribers/{subscriberId}": {
+      "schema": "NewsletterSubscriber",
+      "description": "Email sub registrations from footers and forms."
+    }
+  }
+}

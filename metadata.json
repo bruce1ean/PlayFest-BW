@@ -1,0 +1,8 @@
+{
+  "name": "PlayFest 2026",
+  "description": "Botswana’s premier gaming, custom cars, music, and lifestyle festival audience registration landing page featuring real-time demographic analytics, sponsor stats, and early-bird waitlisted priorities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
