@@ -270,14 +270,6 @@ export default function App() {
                 </p>
 
                 <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 opacity-30 select-none mb-10">
-                  {['Orange Mobile', 'Mascom BW', 'Botswana Tourism', 'Absa Bank BW', 'FNB Botswana'].map((brand, i) => (
-                    <div 
-                      key={i}
-                      className="px-6 py-4 rounded-xl bg-glassmorphism border border-white/10 font-display font-extrabold text-sm uppercase tracking-wider text-white hover:text-pink-500 transition-colors"
-                    >
-                      {brand}
-                    </div>
-                  ))}
                   <div className="px-6 py-4 rounded-xl border-2 border-dashed border-white/20 font-display font-medium text-xs uppercase tracking-wider text-gray-400">
                     YOUR BRAND HERE
                   </div>
@@ -342,7 +334,14 @@ export default function App() {
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 text-[11px] text-gray-600 pt-6 font-mono md:text-right w-full justify-between items-center md:justify-end">
                       <div className="flex gap-4">
                         <a href="#" className="hover:text-pink-500/85">TikTok</a>
-                        <a href="#" className="hover:text-pink-500/85">Instagram</a>
+                        <a 
+                          href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="hover:text-pink-500/85"
+                        >
+                          Instagram
+                        </a>
                         <a href="#" className="hover:text-pink-500/85">Facebook</a>
                         <a href="#" className="hover:text-pink-500/85">WhatsApp</a>
                       </div>
