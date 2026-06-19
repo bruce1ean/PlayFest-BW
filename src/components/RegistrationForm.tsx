@@ -37,6 +37,10 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [dialCode, setDialCode] = useState('+267');
+  const [customDialCode, setCustomDialCode] = useState('');
+  const [country, setCountry] = useState('Botswana');
+  const [customCountry, setCustomCountry] = useState('');
   const [ageGroup, setAgeGroup] = useState<AttendeeRegistration['ageGroup']>('18-24');
   const [gender, setGender] = useState<AttendeeRegistration['gender']>('Prefer not to say');
   const [city, setCity] = useState('');
@@ -87,7 +91,11 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
   const [vendorBusiness, setVendorBusiness] = useState('');
   const [vendorContact, setVendorContact] = useState('');
   const [vendorPhone, setVendorPhone] = useState('');
+  const [vendorDialCode, setVendorDialCode] = useState('+267');
+  const [vendorCustomDialCode, setVendorCustomDialCode] = useState('');
   const [vendorEmail, setVendorEmail] = useState('');
+  const [vendorCountry, setVendorCountry] = useState('Botswana');
+  const [vendorCustomCountry, setVendorCustomCountry] = useState('');
   const [vendorCategory, setVendorCategory] = useState<VendorApplication['category']>('Food & Drinks');
   const [vendorProducts, setVendorProducts] = useState('');
   const [vendorSocials, setVendorSocials] = useState('');
@@ -163,10 +171,15 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
     try {
       const interestsToSend = selectedInterests.length > 0 ? selectedInterests : ['General Interest'];
       
+      const activeDial = dialCode === 'Other' ? (customDialCode.trim() || '+') : dialCode;
+      const finalPhone = activeDial ? `${activeDial} ${phone.trim()}` : phone.trim();
+      const finalCountry = country === 'Other' ? (customCountry.trim() || 'International') : country;
+
       const payload: Omit<AttendeeRegistration, 'id' | 'createdAt'> = {
         fullName,
         email,
-        phoneNumber: phone,
+        phoneNumber: finalPhone,
+        country: finalCountry,
         ageGroup,
         gender,
         city,
@@ -222,11 +235,16 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
 
     setSubmitting(true);
     try {
+      const activeVendorDial = vendorDialCode === 'Other' ? (vendorCustomDialCode.trim() || '+') : vendorDialCode;
+      const finalVendorPhone = activeVendorDial ? `${activeVendorDial} ${vendorPhone.trim()}` : vendorPhone.trim();
+      const finalVendorCountry = vendorCountry === 'Other' ? (vendorCustomCountry.trim() || 'International') : vendorCountry;
+
       const payload: Omit<VendorApplication, 'id' | 'createdAt'> = {
         businessName: vendorBusiness,
         contactPerson: vendorContact,
-        contactNumber: vendorPhone,
+        contactNumber: finalVendorPhone,
         email: vendorEmail,
+        country: finalVendorCountry,
         category: vendorCategory,
         productsOrServices: vendorProducts,
         socialMediaLinks: vendorSocials,
@@ -347,14 +365,83 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                     <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
                       Phone Number <span className="text-pink-500">*</span>
                     </label>
-                    <input
-                      required
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. +267 71 234 567"
-                      className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
-                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={dialCode}
+                        onChange={(e) => setDialCode(e.target.value)}
+                        className="px-3 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none text-xs cursor-pointer max-w-[120px]"
+                      >
+                        <option value="+267">🇧🇼 +267</option>
+                        <option value="+27">🇿🇦 +27</option>
+                        <option value="+263">🇿🇼 +263</option>
+                        <option value="+264">🇳🇦 +264</option>
+                        <option value="+260">🇿🇲 +260</option>
+                        <option value="+266">🇱🇸 +266</option>
+                        <option value="+268">🇸🇿 +268</option>
+                        <option value="+258">🇲🇿 +258</option>
+                        <option value="+265">🇲🇼 +265</option>
+                        <option value="+244">🇦🇴 +244</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="Other">Other</option>
+                      </select>
+
+                      {dialCode === 'Other' && (
+                        <input
+                          required
+                          type="text"
+                          value={customDialCode}
+                          onChange={(e) => setCustomDialCode(e.target.value)}
+                          placeholder="+123"
+                          className="w-16 px-2 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none text-center font-mono text-xs"
+                        />
+                      )}
+
+                      <input
+                        required
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="e.g. 71 234 567"
+                        className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
+                      Country of Residence <span className="text-pink-500">*</span>
+                    </label>
+                    <div className="space-y-2">
+                      <select
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none transition-all font-light text-sm cursor-pointer"
+                      >
+                        <option className="bg-[#0f0c1e]" value="Botswana">Botswana 🇧🇼</option>
+                        <option className="bg-[#0f0c1e]" value="South Africa">South Africa 🇿🇦</option>
+                        <option className="bg-[#0f0c1e]" value="Zimbabwe">Zimbabwe 🇿🇼</option>
+                        <option className="bg-[#0f0c1e]" value="Namibia">Namibia 🇳🇦</option>
+                        <option className="bg-[#0f0c1e]" value="Zambia">Zambia 🇿🇲</option>
+                        <option className="bg-[#0f0c1e]" value="Lesotho">Lesotho 🇱🇸</option>
+                        <option className="bg-[#0f0c1e]" value="Eswatini">Eswatini 🇸🇿</option>
+                        <option className="bg-[#0f0c1e]" value="Mozambique">Mozambique 🇲🇿</option>
+                        <option className="bg-[#0f0c1e]" value="Angola">Angola 🇦🇴</option>
+                        <option className="bg-[#0f0c1e]" value="Malawi">Malawi 🇲🇼</option>
+                        <option className="bg-[#0f0c1e]" value="Other">Other / International</option>
+                      </select>
+
+                      {country === 'Other' && (
+                        <input
+                          required
+                          type="text"
+                          value={customCountry}
+                          onChange={(e) => setCustomCountry(e.target.value)}
+                          placeholder="Enter your country name"
+                          className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none transition-all font-light text-sm"
+                        />
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -366,7 +453,7 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      placeholder="e.g. Gaborone"
+                      placeholder="e.g. Gaborone or Johannesburg"
                       className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
                     />
                   </div>
@@ -842,10 +929,10 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                       onChange={(e) => setSpend(e.target.value as AttendeeRegistration['approximateSpend'])}
                       className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none text-sm font-light cursor-pointer"
                     >
-                      <option className="bg-[#0f0c1e]" value="Under P200">Under P200</option>
-                      <option className="bg-[#0f0c1e]" value="P200–P500">P200–P500 (Standard)</option>
-                      <option className="bg-[#0f0c1e]" value="P500–P1000">P500–P1000</option>
-                      <option className="bg-[#0f0c1e]" value="Over P1000">Over P1000</option>
+                      <option className="bg-[#0f0c1e]" value="Under P200">Under P200 (approx. $15 USD / R270 ZAR)</option>
+                      <option className="bg-[#0f0c1e]" value="P200–P500">P200–P500 (approx. $15–$37 USD / R270–R670 ZAR)</option>
+                      <option className="bg-[#0f0c1e]" value="P500–P1000">P500–P1000 (approx. $37–$75 USD / R670–R1350 ZAR)</option>
+                      <option className="bg-[#0f0c1e]" value="Over P1000">Over P1000 (approx. $75+ USD / R1350+ ZAR)</option>
                     </select>
                   </div>
 
@@ -986,14 +1073,83 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                   <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
                     Contact Mobile Number <span className="text-pink-500">*</span>
                   </label>
-                  <input
-                    required
-                    type="tel"
-                    value={vendorPhone}
-                    onChange={(e) => setVendorPhone(e.target.value)}
-                    placeholder="e.g. +267 71 000 000"
-                    className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none text-sm font-light"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={vendorDialCode}
+                      onChange={(e) => setVendorDialCode(e.target.value)}
+                      className="px-3 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none text-xs cursor-pointer max-w-[120px]"
+                    >
+                      <option value="+267">🇧🇼 +267</option>
+                      <option value="+27">🇿🇦 +27</option>
+                      <option value="+263">🇿🇼 +263</option>
+                      <option value="+264">🇳🇦 +264</option>
+                      <option value="+260">🇿🇲 +260</option>
+                      <option value="+266">🇱🇸 +266</option>
+                      <option value="+268">🇸🇿 +268</option>
+                      <option value="+258">🇲🇿 +258</option>
+                      <option value="+265">🇲🇼 +265</option>
+                      <option value="+244">🇦🇴 +244</option>
+                      <option value="+44">🇬🇧 +44</option>
+                      <option value="+1">🇺🇸 +1</option>
+                      <option value="Other">Other</option>
+                    </select>
+
+                    {vendorDialCode === 'Other' && (
+                      <input
+                        required
+                        type="text"
+                        value={vendorCustomDialCode}
+                        onChange={(e) => setVendorCustomDialCode(e.target.value)}
+                        placeholder="+123"
+                        className="w-16 px-2 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none text-center font-mono text-xs"
+                      />
+                    )}
+
+                    <input
+                      required
+                      type="tel"
+                      value={vendorPhone}
+                      onChange={(e) => setVendorPhone(e.target.value)}
+                      placeholder="e.g. 71 000 000"
+                      className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none text-sm font-light"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
+                    Country of Operation <span className="text-pink-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    <select
+                      value={vendorCountry}
+                      onChange={(e) => setVendorCountry(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none transition-all font-light text-sm cursor-pointer"
+                    >
+                      <option className="bg-[#0f0c1e]" value="Botswana">Botswana 🇧🇼</option>
+                      <option className="bg-[#0f0c1e]" value="South Africa">South Africa 🇿🇦</option>
+                      <option className="bg-[#0f0c1e]" value="Zimbabwe">Zimbabwe 🇿🇼</option>
+                      <option className="bg-[#0f0c1e]" value="Namibia">Namibia 🇳🇦</option>
+                      <option className="bg-[#0f0c1e]" value="Zambia">Zambia 🇿🇲</option>
+                      <option className="bg-[#0f0c1e]" value="Lesotho">Lesotho 🇱🇸</option>
+                      <option className="bg-[#0f0c1e]" value="Eswatini">Eswatini 🇸🇿</option>
+                      <option className="bg-[#0f0c1e]" value="Mozambique">Mozambique 🇲🇿</option>
+                      <option className="bg-[#0f0c1e]" value="Angola">Angola 🇦🇴</option>
+                      <option className="bg-[#0f0c1e]" value="Malawi">Malawi 🇲🇼</option>
+                      <option className="bg-[#0f0c1e]" value="Other">Other / International</option>
+                    </select>
+
+                    {vendorCountry === 'Other' && (
+                      <input
+                        required
+                        type="text"
+                        value={vendorCustomCountry}
+                        onChange={(e) => setVendorCustomCountry(e.target.value)}
+                        placeholder="Enter your country name"
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-cyan-500/60 focus:outline-none transition-all font-light text-sm"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div>

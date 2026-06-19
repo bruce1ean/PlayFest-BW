@@ -208,7 +208,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
     let filename = '';
 
     if (type === 'attendees') {
-      headers = ['ID', 'Date', 'Name', 'Email', 'Phone', 'City', 'Age Group', 'Likelihood', 'Spend Expectation', 'VIP Interest', 'Merch Interest', 'Interests Selected'];
+      headers = ['ID', 'Date', 'Name', 'Email', 'Phone', 'City', 'Country', 'Age Group', 'Likelihood', 'Spend Expectation', 'VIP Interest', 'Merch Interest', 'Interests Selected'];
       rows = registrations.map((r) => [
         r.id,
         r.createdAt.substring(0, 10),
@@ -216,6 +216,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
         r.email,
         r.phoneNumber,
         r.city,
+        r.country || 'Botswana',
         r.ageGroup,
         r.attendanceLikelihood,
         r.approximateSpend,
@@ -225,7 +226,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
       ]);
       filename = `PlayFest2026_Attendees_${new Date().toISOString().slice(0,10)}.csv`;
     } else if (type === 'vendors') {
-      headers = ['ID', 'Date', 'Business Name', 'Contact Person', 'Number', 'Email', 'Category', 'Stall Size', 'Power Required', 'Products'];
+      headers = ['ID', 'Date', 'Business Name', 'Contact Person', 'Number', 'Email', 'Country', 'Category', 'Stall Size', 'Power Required', 'Products'];
       rows = vendors.map((v) => [
         v.id,
         v.createdAt.substring(0, 10),
@@ -233,6 +234,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
         v.contactPerson,
         v.contactNumber,
         v.email,
+        v.country || 'Botswana',
         v.category,
         v.stallSize,
         v.electricityRequired,
@@ -631,7 +633,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
                         <tr className="border-b border-white/5 bg-white/5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
                           <th className="p-4">Reg ID</th>
                           <th className="p-4">Name</th>
-                          <th className="p-4">City</th>
+                          <th className="p-4">Location</th>
                           <th className="p-4">Likelihood</th>
                           <th className="p-4">Group Size</th>
                           <th className="p-4">VIP Interest</th>
@@ -646,7 +648,10 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
                               <div>{r.fullName}</div>
                               <div className="text-[10px] text-gray-400 font-normal">{r.email} • {r.phoneNumber}</div>
                             </td>
-                            <td className="p-4">{r.city}</td>
+                            <td className="p-4">
+                              <div className="font-medium text-white">{r.city}</div>
+                              <div className="text-[10px] text-cyan-400 font-mono">{r.country || 'Botswana'}</div>
+                            </td>
                             <td className="p-4">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase font-mono ${
                                 r.attendanceLikelihood === 'Definitely' 
@@ -855,8 +860,11 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
                       <div key={v.id} className="p-6 rounded-2xl bg-glassmorphism border border-white/5 hover:border-purple-500/20 transition-all">
                         <div className="flex flex-col sm:flex-row justify-between items-start gap-2 mb-2">
                           <div>
-                            <h5 className="text-base font-bold font-display text-white">{v.businessName}</h5>
-                            <span className="text-xs text-gray-400">Contact: {v.contactPerson} • {v.contactNumber} • {v.email}</span>
+                            <div className="flex items-center gap-2">
+                              <h5 className="text-base font-bold font-display text-white">{v.businessName}</h5>
+                              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-900/20 px-2 py-0.5 rounded border border-cyan-500/20">{v.country || 'Botswana'}</span>
+                            </div>
+                            <span className="text-xs text-gray-400 block mt-1">Contact: {v.contactPerson} • {v.contactNumber} • {v.email}</span>
                           </div>
                           <span className="text-[10px] font-extrabold uppercase font-mono px-3 py-1 rounded bg-purple-500/20 text-purple-400">
                             {v.category}

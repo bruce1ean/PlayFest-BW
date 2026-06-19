@@ -9,6 +9,7 @@ export interface AttendeeRegistration {
   fullName: string;
   email: string;
   phoneNumber: string;
+  country?: string;
   ageGroup: 'Under 18' | '18-24' | '25-34' | '35-44' | '45+';
   gender?: 'Male' | 'Female' | 'Non-binary' | 'Prefer not to say';
   city: string;
@@ -50,6 +51,7 @@ export interface VendorApplication {
   contactPerson: string;
   contactNumber: string;
   email: string;
+  country?: string;
   category: 'Food & Drinks' | 'Gaming Merch / Accessories' | 'Apparel/Lifestyle' | 'Automotive' | 'Tech/Exhibition' | 'Art & Crafts' | 'Other';
   productsOrServices: string;
   socialMediaLinks: string;
