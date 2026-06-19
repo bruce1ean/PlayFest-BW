@@ -70,3 +70,13 @@ export interface AppAnalytics {
   deviceTypes: { mobile: number; desktop: number; tablet: number };
   trafficSources: { [source: string]: number };
 }
+
+export interface ConceptComment {
+  id: string;
+  name: string;
+  email: string;
+  comment: string;
+  vibe: 'stoked' | 'supportive' | 'curious' | 'critical' | 'creative';
+  demandLevel: number; // Scale of 1 to 10
+  createdAt: string;
+}

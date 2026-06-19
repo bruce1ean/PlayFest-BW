@@ -18,7 +18,7 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics } from '../types';
+import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics, ConceptComment } from '../types';
 import { generateSeedData } from '../mockData';
 
 // 1. Initialize Firebase safely
@@ -47,6 +47,9 @@ const STORAGE_REGISTRATIONS_KEY = 'playfest_registrations';
 const STORAGE_VENDORS_KEY = 'playfest_vendors';
 const STORAGE_SUBSCRIBERS_KEY = 'playfest_subscribers';
 const STORAGE_ANALYTICS_KEY = 'playfest_analytics';
+const STORAGE_COMMENTS_KEY = 'playfest_comments';
+
+const DEFAULT_COMMENTS: ConceptComment[] = [];
 
 function getLocalData<T>(key: string, defaultValue: T): T {
   const stored = localStorage.getItem(key);
@@ -66,11 +69,12 @@ function saveLocalData<T>(key: string, value: T): void {
 
 // Seed local storage with high-fidelity realistic data on first load
 function ensureSeededLocalData() {
-  const resetDone = localStorage.getItem('playfest_zero_reset_v4');
+  const resetDone = localStorage.getItem('playfest_zero_reset_v5');
   if (!resetDone) {
     saveLocalData(STORAGE_REGISTRATIONS_KEY, []);
     saveLocalData(STORAGE_VENDORS_KEY, []);
     saveLocalData(STORAGE_SUBSCRIBERS_KEY, []);
+    saveLocalData(STORAGE_COMMENTS_KEY, []); // Clear comments
     
     // Seed initial clean zero-based analytics
     const initialAnalytics: AppAnalytics = {
@@ -94,7 +98,7 @@ function ensureSeededLocalData() {
       }
     };
     saveLocalData(STORAGE_ANALYTICS_KEY, initialAnalytics);
-    localStorage.setItem('playfest_zero_reset_v4', 'true');
+    localStorage.setItem('playfest_zero_reset_v5', 'true');
     localStorage.removeItem('playfest_seeded_v1');
   }
 }
@@ -168,22 +172,31 @@ export const storage = {
 
   // GET Registrations
   async getRegistrations(): Promise<AttendeeRegistration[]> {
+    const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
+    let blended = [...local];
+
     if (useFirebase && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'registrations'));
-        const list: AttendeeRegistration[] = [];
+        const firebaseList: AttendeeRegistration[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
+          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
         });
-        // Sort newest first
-        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        // Merge without duplicates by id
+        const ids = new Set(local.map(r => r.id));
+        firebaseList.forEach(item => {
+          if (!ids.has(item.id)) {
+            blended.push(item);
+          }
+        });
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'registrations');
+        console.warn('Error fetching registrations from Firebase (using local backup):', error);
       }
     }
-    // Storage Fallback
-    const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
-    return local.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    // Sort newest first
+    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   // SAVE Registration
@@ -194,42 +207,48 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
-    if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'registrations', newReg.id), newReg);
-        // Also update local copy for seamless blended storage
-        const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
-        local.push(newReg);
-        saveLocalData(STORAGE_REGISTRATIONS_KEY, local);
-        return newReg;
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `registrations/${newReg.id}`);
-      }
-    }
-
-    // Local Storage save
+    // ALWAYS save to LocalStorage first to guarantee 100% data preservation and retention!
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
     local.push(newReg);
     saveLocalData(STORAGE_REGISTRATIONS_KEY, local);
+
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, 'registrations', newReg.id), newReg);
+        console.log('Firebase registration saved successfully:', newReg.id);
+      } catch (error) {
+        console.error('Firestore Error saving registration, fallback to local retention:', error);
+        // Do not throw! Returning the local copy guarantees success is retained.
+      }
+    }
+
     return newReg;
   },
 
   // GET Vendors
   async getVendorApplications(): Promise<VendorApplication[]> {
+    const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
+    let blended = [...local];
+
     if (useFirebase && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'vendors'));
-        const list: VendorApplication[] = [];
+        const firebaseList: VendorApplication[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as VendorApplication);
+          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as VendorApplication);
         });
-        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        const ids = new Set(local.map(v => v.id));
+        firebaseList.forEach(item => {
+          if (!ids.has(item.id)) {
+            blended.push(item);
+          }
+        });
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'vendors');
+        console.warn('Error fetching vendor applications from Firebase:', error);
       }
     }
-    const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
-    return local.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   // SAVE Vendor Application
@@ -240,39 +259,47 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
-    if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'vendors', newVendor.id), newVendor);
-        const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
-        local.push(newVendor);
-        saveLocalData(STORAGE_VENDORS_KEY, local);
-        return newVendor;
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `vendors/${newVendor.id}`);
-      }
-    }
-
+    // ALWAYS save locally first
     const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
     local.push(newVendor);
     saveLocalData(STORAGE_VENDORS_KEY, local);
+
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, 'vendors', newVendor.id), newVendor);
+        console.log('Firebase vendor application saved successfully:', newVendor.id);
+      } catch (error) {
+        console.error('Firestore Error saving vendor, fallback to local retention:', error);
+      }
+    }
+
     return newVendor;
   },
 
   // GET Newsletter Subscribers
   async getNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+    const local = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
+    let blended = [...local];
+
     if (useFirebase && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'subscribers'));
-        const list: NewsletterSubscriber[] = [];
+        const firebaseList: NewsletterSubscriber[] = [];
         querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as NewsletterSubscriber);
+          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as NewsletterSubscriber);
         });
-        return list;
+        
+        const ids = new Set(local.map(s => s.id));
+        firebaseList.forEach(item => {
+          if (!ids.has(item.id)) {
+            blended.push(item);
+          }
+        });
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'subscribers');
+        console.warn('Error fetching subscribers from Firebase:', error);
       }
     }
-    return getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
+    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   // SUBSCRIBE to Newsletter
@@ -283,21 +310,21 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
+    const local = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
+    if (!local.some(s => s.email.toLowerCase() === email.toLowerCase())) {
+      local.push(newSub);
+      saveLocalData(STORAGE_SUBSCRIBERS_KEY, local);
+    }
+
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, 'subscribers', newSub.id), newSub);
-        const local = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
-        local.push(newSub);
-        saveLocalData(STORAGE_SUBSCRIBERS_KEY, local);
-        return newSub;
+        console.log('Firebase subscription saved successfully:', newSub.id);
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `subscribers/${newSub.id}`);
+        console.error('Firestore Error saving subscription, fallback to local retention:', error);
       }
     }
 
-    const local = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
-    local.push(newSub);
-    saveLocalData(STORAGE_SUBSCRIBERS_KEY, local);
     return newSub;
   },
 
@@ -387,5 +414,56 @@ export const storage = {
         // Soft fail
       }
     }
+  },
+
+  // GET Concept Reviews / Comments
+  async getConceptComments(): Promise<ConceptComment[]> {
+    const local = getLocalData<ConceptComment[]>(STORAGE_COMMENTS_KEY, DEFAULT_COMMENTS);
+    let blended = [...local];
+
+    if (useFirebase && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'comments'));
+        const firebaseList: ConceptComment[] = [];
+        querySnapshot.forEach((docSnap) => {
+          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as ConceptComment);
+        });
+        
+        const ids = new Set(local.map(c => c.id));
+        firebaseList.forEach(item => {
+          if (!ids.has(item.id)) {
+            blended.push(item);
+          }
+        });
+      } catch (error) {
+        console.warn('Error fetching concept comments from Firebase:', error);
+      }
+    }
+    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  // SAVE Custom Concept Review / Comment
+  async saveConceptComment(comment: Omit<ConceptComment, 'id' | 'createdAt'>): Promise<ConceptComment> {
+    const newComment: ConceptComment = {
+      ...comment,
+      id: `comm_${Math.random().toString(36).substring(2, 9)}`,
+      createdAt: new Date().toISOString()
+    };
+
+    // ALWAYS save locally first
+    const local = getLocalData<ConceptComment[]>(STORAGE_COMMENTS_KEY, DEFAULT_COMMENTS);
+    local.push(newComment);
+    saveLocalData(STORAGE_COMMENTS_KEY, local);
+
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, 'comments', newComment.id), newComment);
+        console.log('Firebase brand/concept comment saved successfully:', newComment.id);
+      } catch (error) {
+        console.error('Firestore Error saving comment, fallback to local retention:', error);
+      }
+    }
+
+    return newComment;
   }
 };

@@ -5,34 +5,10 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, ChevronDown, ChevronUp, MessageSquare, Quote } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function TestimonialsFAQ() {
   const [openFAQ, setOpenFAQ] = useState<number | null>(null);
-
-  const testimonials = [
-    {
-      name: 'Kabelo "StanceBW" Phiri',
-      role: 'Automotive Enthusiast & Tuner',
-      comment: 'Botswana’s automotive culture has been waiting for an exclusive, highly organized event like PlayFest. Bringing customization lifestyle, esports, and music together under neon city lights is the dream combo.',
-      rating: 5,
-      avatar: '🚗'
-    },
-    {
-      name: 'Lesedi "LexiPlay" Tau',
-      role: 'Esports Athlete & Streamer',
-      comment: 'Finally, a festival that prioritizes official brackets and tournaments with real setups! Botswana has insanely passionate gamers looking for high-tier arenas to showcase their skills.',
-      rating: 5,
-      avatar: '🎮'
-    },
-    {
-      name: 'Tumelo "DJ Flame" Letsholo',
-      role: 'Local electronic DJ & Producer',
-      comment: 'The music, car, and gaming worlds are deeply connected in Botswana. This lifestyle synergy is going to draw massive crowds. I cannot wait to stand behind the decks with glowing state laser rigs!',
-      rating: 5,
-      avatar: '🎵'
-    }
-  ];
 
   const faqs = [
     {
@@ -71,54 +47,6 @@ export default function TestimonialsFAQ() {
 
   return (
     <section className="py-20 px-4 relative max-w-6xl mx-auto z-10" id="faq">
-      {/* Testimonials */}
-      <div className="mb-24">
-        <div className="text-center mb-16">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-pink-400 text-glow-pink mb-2 font-display">
-            The Buzz
-          </h2>
-          <h3 className="text-3xl sm:text-5xl font-extrabold font-display uppercase tracking-tight text-white">
-            Community <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500 text-glow-purple">Voices</span>
-          </h3>
-          <p className="text-gray-400 max-w-xl mx-auto mt-3 text-sm font-light">
-            Here is what esports champions, automotive tuners, and local lifestyle creators expect from PlayFest 2026.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map((test, idx) => (
-            <div
-              key={idx}
-              className="p-6 rounded-2xl bg-glassmorphism border border-white/5 relative group hover:border-pink-500/20 transition-all duration-300 flex flex-col justify-between"
-            >
-              <Quote className="absolute top-4 right-4 w-12 h-12 text-pink-500/5 rotate-18" />
-              
-              <div>
-                <div className="flex gap-1 mb-4">
-                  {Array.from({ length: test.rating }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-pink-500 text-pink-500" />
-                  ))}
-                </div>
-                
-                <p className="text-sm text-gray-300 leading-relaxed font-light italic mb-6">
-                  "{test.comment}"
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 border-t border-white/5 pt-4">
-                <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-lg select-none">
-                  {test.avatar}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-white font-display">{test.name}</div>
-                  <div className="text-xs text-gray-400">{test.role}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* FAQ Accordion */}
       <div>
         <div className="text-center mb-16">

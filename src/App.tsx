@@ -21,6 +21,7 @@ import WhyRegister from './components/WhyRegister';
 import FestivalAttractions from './components/FestivalAttractions';
 import RegistrationForm from './components/RegistrationForm';
 import TestimonialsFAQ from './components/TestimonialsFAQ';
+import ConceptFeedbackBoard from './components/ConceptFeedbackBoard';
 import SuccessPage from './components/SuccessPage';
 import AdminDashboard from './components/AdminDashboard';
 import CustomToast, { ToastMessage } from './components/CustomToast';
@@ -145,6 +146,7 @@ export default function App() {
         {/* Desktop navbar options */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-gray-400">
           <a href="#experience" className="hover:text-white transition-colors cursor-pointer">Experience</a>
+          <a href="#feedback" className="hover:text-white transition-colors cursor-pointer">Vibes Board</a>
           <a href="#faq" className="hover:text-white transition-colors cursor-pointer">FAQ</a>
           <button 
             onClick={() => {
@@ -250,7 +252,10 @@ export default function App() {
                 addToast={addToast}
               />
 
-              {/* 5. Reviews & FAQS */}
+              {/* 5. Interactive Concept Feedback Board */}
+              <ConceptFeedbackBoard addToast={addToast} />
+
+              {/* 6. FAQs Section */}
               <TestimonialsFAQ />
 
               {/* 6. Sponsor Spotlight Strip */}

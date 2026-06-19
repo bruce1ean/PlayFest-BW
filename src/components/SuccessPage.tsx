@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Share2, 
@@ -26,6 +26,12 @@ import {
   MapPin
 } from 'lucide-react';
 import { storage } from '../lib/storage';
+import { 
+  initAuth, 
+  googleSignIn, 
+  logout as googleLogout, 
+  addPlayFestEventToCalendar 
+} from '../lib/googleCalendar';
 
 interface SuccessPageProps {
   registrationType: 'attendee' | 'vendor';
@@ -40,10 +46,91 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
   // Custom message variations to toggle
   const [activeMessageIndex, setActiveMessageIndex] = useState(0);
 
+  // Google Calendar Auth States
+  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isCalendarAdding, setIsCalendarAdding] = useState(false);
+  const [isCalendarAdded, setIsCalendarAdded] = useState(false);
+
   const name = registeredDetails?.fullName || registeredDetails?.businessName || 'Friend';
   const city = registeredDetails?.city || 'Gaborone';
   const idBadge = registeredDetails?.id || `PF-${Math.floor(Math.random() * 9000 + 1000)}`;
   const priority = registeredDetails?.ticketPriority || 'General Access RSVP';
+
+  // Initialize auth listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleAccessToken(token);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleAccessToken(null);
+      }
+    );
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsSigningIn(true);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setGoogleAccessToken(result.accessToken);
+        addToast('Connected with Google Calendar safely!', 'success');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast(err.message || 'Google account link failed.', 'error');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await googleLogout();
+      setGoogleUser(null);
+      setGoogleAccessToken(null);
+      setIsCalendarAdded(false);
+      addToast('Google account disconnected.', 'info');
+    } catch (err: any) {
+      addToast('Logout action failed.', 'error');
+    }
+  };
+
+  const handleAddToCalendar = async () => {
+    if (!googleAccessToken) {
+      addToast('Please login with your Google account first.', 'error');
+      return;
+    }
+
+    // Explicit confirmation dialog (mandated by Workspace mutated/created data constraints)
+    const confirmAdd = window.confirm(
+      `Would you like to authorize PlayFest to add the 3-day event "PlayFest 2026 Botswana 🇧🇼" (Nov 20-22, 2026) directly to your Google Calendar?`
+    );
+    if (!confirmAdd) return;
+
+    setIsCalendarAdding(true);
+    try {
+      await addPlayFestEventToCalendar(googleAccessToken, {
+        name,
+        serial: idBadge
+      });
+      setIsCalendarAdded(true);
+      addToast('Successfully added PlayFest 2026 to your Google Calendar!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      addToast('Scheduling failed. Please verify grant permissions.', 'error');
+    } finally {
+      setIsCalendarAdding(false);
+    }
+  };
 
   const messageOptions = [
     {
@@ -174,7 +261,7 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
 
                 <div className="sm:self-end">
                   <div className="text-[9px] uppercase font-mono text-gray-400 sm:text-right">SERIAL NO</div>
-                  <div className="text-xs text-gray-300 font-mono font-medium mt-0.5">
+                  <div className="text-xs text-secondary font-mono font-medium mt-0.5">
                     {idBadge}
                   </div>
                 </div>
@@ -211,6 +298,79 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Google Calendar Add Event Integration */}
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/5 text-left relative overflow-hidden backdrop-blur-sm">
+          <div className="absolute top-0 right-0 w-[100px] h-[100px] bg-cyan-500/5 rounded-full blur-xl pointer-events-none" />
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-white uppercase font-display flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-cyan-400" /> Sync to Google Calendar
+              </h4>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-1 font-light leading-relaxed">
+                Add PlayFest 2026 Botswana (November 20-22, 2026) directly to your calendar to receive event updates, waitlist status, and dynamic RSVP reminders.
+              </p>
+            </div>
+          </div>
+
+          {!googleAccessToken ? (
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={isSigningIn}
+              className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 border border-white/10 transition-all cursor-pointer shadow-md"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12.24 10.285V14.4h6.887a5.555 5.555 0 0 1-2.4 3.665l3.77 2.925c2.203-2.03 3.472-5.016 3.472-8.56a12.593 12.593 0 0 0-.21-2.145H12.24Z" />
+                <path fill="#4285F4" d="M12.24 24c3.24 0 5.95-1.075 7.93-2.915l-3.77-2.925c-1.045.7-2.385 1.115-3.93 1.115-3.03 0-5.59-2.045-6.51-4.8l-3.9 3.015C4.03 21.09 7.79 24 12.24 24Z" />
+                <path fill="#34A853" d="M5.73 14.475a7.11 7.11 0 0 1 0-4.59l-3.9-3.015a11.96 11.96 0 0 0 0 10.62l3.9-3.015Z" />
+                <path fill="#FBBC05" d="M12.24 4.8c1.765 0 3.35.61 4.595 1.795l3.435-3.435C18.19 1.19 15.48 0 12.24 0 7.79 0 4.03 2.91 2.06 6.87l3.9 3.015c.92-2.755 3.48-4.8 6.51-4.8Z" />
+              </svg>
+              {isSigningIn ? 'Connecting google account...' : 'Connect Google Calendar'}
+            </button>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 bg-white/5 flex items-center justify-center">
+                  {googleUser?.photoURL ? (
+                    <img 
+                      src={googleUser.photoURL} 
+                      alt={googleUser.displayName || 'OAuth Account'} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
+                  ) : (
+                    <User className="w-4 h-4 text-cyan-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-white truncate max-w-[160px] sm:max-w-[200px]">
+                    {googleUser?.displayName || 'Google Account'}
+                  </div>
+                  <button 
+                    onClick={handleSignOut} 
+                    className="text-[9px] text-pink-500 hover:text-pink-400 transition-colors font-mono uppercase block mt-0.5 cursor-pointer hover:underline"
+                  >
+                    Disconnect Access
+                  </button>
+                </div>
+              </div>
+
+              {isCalendarAdded ? (
+                <div className="py-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-black font-mono tracking-widest flex items-center justify-center gap-1.5 self-start sm:self-center">
+                  <Check className="w-3.5 h-3.5 stroke-[3px]" /> ADDED TO CALENDAR!
+                </div>
+              ) : (
+                <button
+                  onClick={handleAddToCalendar}
+                  disabled={isCalendarAdding}
+                  className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-pink-500 override-gradient-cyan to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white font-black text-[10px] uppercase tracking-widest font-display transition-all shadow-[0_4px_15px_rgba(236,72,153,0.25)] cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isCalendarAdding ? 'Scheduling...' : 'Add Festival Calendar Event'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Share Component Section */}
