@@ -14,8 +14,8 @@ service cloud.firestore {
                     request.resource.data.email is string &&
                     request.resource.data.email.size() <= 200 &&
                     request.resource.data.city is string;
-      // Allow read/write for verified accounts if the user sets up admin profiles
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
     }
 
     // Vendors rule
@@ -24,14 +24,24 @@ service cloud.firestore {
                     request.resource.data.businessName.size() <= 200 &&
                     request.resource.data.contactPerson is string &&
                     request.resource.data.email is string;
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
     }
 
     // Subscribers rule
     match /subscribers/{subscriberId} {
       allow create: if request.resource.data.email is string &&
                     request.resource.data.email.size() <= 200;
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Comments rule
+    match /comments/{commentId} {
+      allow create: if request.resource.data.text is string &&
+                    request.resource.data.text.size() <= 1000;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
     }
 
     // Analytics dashboard rule

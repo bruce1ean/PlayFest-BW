@@ -20,8 +20,8 @@ export default function TestimonialsFAQ() {
       a: 'Yes, registration is 100% completely free! It is simply an audience registration stage to measure demographic sizes, activity interest, and geographical distribution to prepare for an incredible festival.'
     },
     {
-      q: 'Does registering guarantee a ticket?',
-      a: 'No. Registering your interest does not guarantee a ticket, but it puts you on the exclusive VIP Priority List, granting you direct 6-hour early-access priority notifications and discount rates when ticket slots officially open.'
+      q: 'Does registering guarantee a ticket or a VIP Pass?',
+      a: 'No, registering does not guarantee a ticket or a VIP pass. However, registering on this site enters you into our exclusive prize draws where you stand to win a free VIP Pass and other amazing giveaways that will be announced in the future! It also places you on our priority waitlist for early-access booking notifications when official ticket batches are released.'
     },
     {
       q: 'When will tickets become available?',

@@ -6,14 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  PlusCircle, 
   Settings, 
-  MapPin, 
-  Sparkles, 
-  Send, 
-  Volume2, 
-  Heart, 
-  ExternalLink 
+  Send 
 } from 'lucide-react';
 
 import HeroSection from './components/HeroSection';
@@ -24,14 +18,16 @@ import TestimonialsFAQ from './components/TestimonialsFAQ';
 import ConceptFeedbackBoard from './components/ConceptFeedbackBoard';
 import SuccessPage from './components/SuccessPage';
 import AdminDashboard from './components/AdminDashboard';
+import LoginPage from './components/LoginPage';
 import CustomToast, { ToastMessage } from './components/CustomToast';
 
 import { storage } from './lib/storage';
+import { sounds } from './lib/sounds';
 import { AttendeeRegistration, VendorApplication } from './types';
 
 export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [viewState, setViewState] = useState<'home' | 'success' | 'admin'>('home');
+  const [viewState, setViewState] = useState<'home' | 'register' | 'login' | 'success' | 'admin' | 'feedback'>('home');
   const [lastSubmissionType, setLastSubmissionType] = useState<'attendee' | 'vendor'>('attendee');
   const [lastSubmissionDetails, setLastSubmissionDetails] = useState<any>(null);
 
@@ -90,6 +86,7 @@ export default function App() {
     setLastSubmissionType(type);
     setLastSubmissionDetails(data);
     setViewState('success');
+    sounds.playSuccess();
     syncServerStats();
     addToast('Registration received! Thank you for supporting PlayFest.', 'success');
     
@@ -106,6 +103,7 @@ export default function App() {
 
     try {
       await storage.subscribeNewsletter(newsletterEmail);
+      sounds.playSuccess();
       addToast('Subscribed! You’re on the priority updates queue.', 'success');
       setNewsletterEmail('');
     } catch {
@@ -115,24 +113,43 @@ export default function App() {
     }
   };
 
-  const scrollToRegistration = () => {
-    storage.trackClick('btn-navbar-register');
-    const formSec = document.getElementById('registration-section');
-    if (formSec) {
-      formSec.scrollIntoView({ behavior: 'smooth' });
-    }
+  const navigateToRegister = () => {
+    storage.trackClick('btn-navigate-register');
+    sounds.playSelect();
+    setViewState('register');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToHome = () => {
+    sounds.playCancel();
+    setViewState('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToLogin = () => {
+    storage.trackClick('btn-navigate-login');
+    sounds.playSelect();
+    setViewState('login');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToFeedback = () => {
+    storage.trackClick('btn-navigate-feedback');
+    sounds.playSelect();
+    setViewState('feedback');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <div className="relative min-h-screen font-sans bg-[#05020c]">
+    <div className="relative min-h-screen font-sans bg-[#05020c] text-white">
       
       {/* Dynamic Background Stars Ambient Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />
       
       {/* Navigation Header bar */}
-      <header className="fixed top-0 inset-x-0 h-20 bg-[#05020c]/60 backdrop-blur-xl border-b border-white/5 z-40 flex items-center justify-between px-6 sm:px-12">
+      <header className="fixed top-0 inset-x-0 h-20 bg-[#05020c]/70 backdrop-blur-xl border-b border-white/5 z-40 flex items-center justify-between px-6 sm:px-12">
         <div 
-          onClick={() => setViewState('home')}
+          onClick={navigateToHome}
           className="flex items-center gap-2 cursor-pointer group"
         >
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold font-display uppercase shadow-[0_0_15px_rgba(236,72,153,0.3)] group-hover:scale-105 transition-all">
@@ -145,17 +162,38 @@ export default function App() {
 
         {/* Desktop navbar options */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-gray-400">
-          <a href="#experience" className="hover:text-white transition-colors cursor-pointer">Experience</a>
-          <a href="#feedback" className="hover:text-white transition-colors cursor-pointer">Vibes Board</a>
-          <a href="#faq" className="hover:text-white transition-colors cursor-pointer">FAQ</a>
+          <button 
+            onClick={navigateToHome} 
+            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'home' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
+          >
+            Home
+          </button>
+          <button 
+            onClick={navigateToRegister} 
+            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'register' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
+          >
+            RSVP & Vendor
+          </button>
+          <button 
+            onClick={navigateToFeedback} 
+            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'feedback' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
+          >
+            Speak Your Mind
+          </button>
+          <button 
+            onClick={navigateToLogin} 
+            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'login' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
+          >
+            My Pass / Log In
+          </button>
           <button 
             onClick={() => {
               storage.trackClick('btn-admin-gate');
               setViewState('admin');
             }}
-            className="hover:text-pink-400 text-glow-pink transition-colors font-mono cursor-pointer"
+            className={`hover:text-pink-400 text-glow-pink transition-colors font-mono cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'admin' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
           >
-            Organizer-Access
+            Organizer Console
           </button>
         </nav>
 
@@ -173,7 +211,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={scrollToRegistration}
+            onClick={navigateToRegister}
             className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-pink-500 to-purple-600 font-display font-bold text-xs uppercase tracking-wider text-white hover:shadow-[0_0_15px_rgba(236,72,153,0.3)] cursor-pointer transition-all"
           >
             RSVP FOR FREE
@@ -182,7 +220,7 @@ export default function App() {
       </header>
 
       {/* Primary Dynamic Main Body Switch */}
-      <main className="relative z-10">
+      <main className="relative z-10 pt-20">
         <AnimatePresence mode="wait">
           
           {/* VIEW: ADMIN ORGANIZER CONSOLE */}
@@ -219,6 +257,72 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* VIEW: LOGIN & PASS CHECKUP PORTAL */}
+          {viewState === 'login' && (
+            <motion.div
+              key="login-portal-view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <LoginPage 
+                onSuccessAttendee={(details) => {
+                  setLastSubmissionDetails(details);
+                  const type = details.businessName ? 'vendor' : 'attendee';
+                  setLastSubmissionType(type);
+                  setViewState('success');
+                }}
+                onSuccessOrganizer={() => {
+                  setViewState('admin');
+                }}
+                onNavigateToRegister={navigateToRegister}
+                addToast={addToast}
+              />
+              
+              {/* Footer Block */}
+              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
+                  <div>© {new Date().getFullYear()} PlayFest Gaborone. Designed Mobile-First.</div>
+                  <div className="flex gap-4">
+                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
+                    <a href="#" className="hover:text-pink-500">TikTok</a>
+                  </div>
+                </div>
+              </footer>
+            </motion.div>
+          )}
+
+          {/* VIEW: STANDALONE REGISTER STEP FORM */}
+          {viewState === 'register' && (
+            <motion.div
+              key="register-portal-view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <RegistrationForm 
+                onSuccess={handleRegisterSuccess}
+                addToast={addToast}
+              />
+
+              {/* FAQs directly on RSVP view for seamless reassurance */}
+              <TestimonialsFAQ />
+
+              {/* Footer Block */}
+              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
+                  <div>© {new Date().getFullYear()} PlayFest Botswana. Standalone Form.</div>
+                  <div className="flex gap-4">
+                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
+                    <a href="#" className="hover:text-pink-500">TikTok</a>
+                  </div>
+                </div>
+              </footer>
+            </motion.div>
+          )}
+
           {/* VIEW: REGULAR LANDING PAGE VIEW */}
           {viewState === 'home' && (
             <motion.div
@@ -230,12 +334,13 @@ export default function App() {
             >
               {/* 1. Hero Block */}
               <HeroSection 
-                onRegisterClick={scrollToRegistration}
-                onPartnerClick={() => {
-                  const formSec = document.getElementById('registration-section');
-                  if (formSec) {
-                    formSec.scrollIntoView({ behavior: 'smooth' });
-                  }
+                onRegisterClick={navigateToRegister}
+                onPartnerClick={navigateToRegister}
+                onFeedbackClick={navigateToFeedback}
+                onLoginClick={navigateToLogin}
+                onAdminClick={() => {
+                  storage.trackClick('btn-admin-gate');
+                  setViewState('admin');
                 }}
                 stats={stats}
               />
@@ -246,16 +351,7 @@ export default function App() {
               {/* 3. Attractions Showcase */}
               <FestivalAttractions />
 
-              {/* 4. Unified Registration Hub Form */}
-              <RegistrationForm 
-                onSuccess={handleRegisterSuccess}
-                addToast={addToast}
-              />
-
-              {/* 5. Interactive Concept Feedback Board */}
-              <ConceptFeedbackBoard addToast={addToast} />
-
-              {/* 6. FAQs Section */}
+              {/* 4. FAQs Section */}
               <TestimonialsFAQ />
 
               {/* 6. Sponsor Spotlight Strip */}
@@ -277,7 +373,7 @@ export default function App() {
 
                 <button
                   id="partner-low-enquiry-cta"
-                  onClick={scrollToRegistration}
+                  onClick={navigateToRegister}
                   className="px-8 py-3 rounded-lg bg-glassmorphism border border-white/10 hover:border-pink-500/20 text-xs font-bold font-display uppercase tracking-wider text-pink-400 hover:text-white transition-all cursor-pointer inline-flex items-center gap-1.5"
                 >
                   <Send className="w-3.5 h-3.5" /> SUBMIT BRAND ENQUIRY
@@ -309,7 +405,7 @@ export default function App() {
                         Stay Tuned via priority feed
                       </h5>
                       <p className="text-[11px] text-gray-500 mb-4">
-                        Join the email queue for developer tournament updates and Gaborone staging releases. No spam.
+                        Join the email queue for Gaborone staging releases and tournament updates. No spam.
                       </p>
                       
                       <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
@@ -354,6 +450,30 @@ export default function App() {
                 </div>
               </footer>
 
+            </motion.div>
+          )}
+
+          {/* VIEW: SPEAK YOUR MIND (CONCEPT FEEDBACK BOARD) */}
+          {viewState === 'feedback' && (
+            <motion.div
+              key="feedback-portal-view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ConceptFeedbackBoard addToast={addToast} />
+
+              {/* Footer Block */}
+              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
+                  <div>© {new Date().getFullYear()} PlayFest Botswana. Speak Your Mind.</div>
+                  <div className="flex gap-4">
+                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
+                    <a href="#" className="hover:text-pink-500">TikTok</a>
+                  </div>
+                </div>
+              </footer>
             </motion.div>
           )}
 

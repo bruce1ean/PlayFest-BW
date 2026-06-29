@@ -13,15 +13,38 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
+// Resolve Firebase Config from environment variables or local JSON config
+const getFirebaseConfig = () => {
+  const metaEnv = (import.meta as any).env || {};
+  if (
+    metaEnv.VITE_FIREBASE_API_KEY &&
+    metaEnv.VITE_FIREBASE_PROJECT_ID
+  ) {
+    return {
+      apiKey: metaEnv.VITE_FIREBASE_API_KEY,
+      authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || '',
+      projectId: metaEnv.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || '',
+      messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+      appId: metaEnv.VITE_FIREBASE_APP_ID || '',
+      measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || '',
+      firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)'
+    };
+  }
+  return firebaseConfig;
+};
+
+const resolvedConfig = getFirebaseConfig();
+
 // Initialize Firebase safely for Calendar OAuth
-const isPlaceholder = !firebaseConfig || firebaseConfig.apiKey.includes('placeholder') || firebaseConfig.apiKey === '';
+const isPlaceholder = !resolvedConfig || !resolvedConfig.apiKey || resolvedConfig.apiKey.includes('placeholder') || resolvedConfig.apiKey === '';
 
 let app;
 let auth: any = null;
 
 if (!isPlaceholder) {
   try {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    app = getApps().length === 0 ? initializeApp(resolvedConfig) : getApp();
     auth = getAuth(app);
   } catch (error) {
     console.error('Error initializing Auth for Google Calendar', error);

@@ -96,11 +96,11 @@ export default function WhyRegister() {
         </div>
 
         <p className="text-base sm:text-lg text-white font-medium max-w-2xl mx-auto">
-          "Registration is <span className="text-pink-400 font-bold underline decoration-pink-500/40">100% completely free</span> and does not commit you to purchasing any ticket in the future."
+          "Registration is <span className="text-pink-400 font-bold underline decoration-pink-500/40">100% completely free</span> and automatically enters you into our exclusive draws to stand a chance to win a free VIP Pass and future surprise giveaways!"
         </p>
 
         <p className="text-xs text-gray-400 mt-2 max-w-lg mx-auto font-light">
-          We only collect secure statistic aggregated metrics to prove regional demand to our sponsors, venues, municipal logisticians, and vendor partners.
+          Registering doesn't obligate you to buy anything; it keeps you on the priority announcement queue and enters you into our prize giveaways (to be announced in the future).
         </p>
       </div>
     </section>

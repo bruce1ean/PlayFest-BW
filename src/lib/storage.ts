@@ -6,7 +6,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore,
+  memoryLocalCache, 
   collection, 
   addDoc, 
   getDocs, 
@@ -21,8 +22,31 @@ import firebaseConfig from '../firebase-applet-config.json';
 import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics, ConceptComment } from '../types';
 import { generateSeedData } from '../mockData';
 
+// Resolve Firebase Config from environment variables or local JSON config
+const getFirebaseConfig = () => {
+  const metaEnv = (import.meta as any).env || {};
+  if (
+    metaEnv.VITE_FIREBASE_API_KEY &&
+    metaEnv.VITE_FIREBASE_PROJECT_ID
+  ) {
+    return {
+      apiKey: metaEnv.VITE_FIREBASE_API_KEY,
+      authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || '',
+      projectId: metaEnv.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || '',
+      messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+      appId: metaEnv.VITE_FIREBASE_APP_ID || '',
+      measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || '',
+      firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)'
+    };
+  }
+  return firebaseConfig;
+};
+
+const resolvedConfig = getFirebaseConfig();
+
 // 1. Initialize Firebase safely
-const isPlaceholder = !firebaseConfig || firebaseConfig.apiKey.includes('placeholder') || firebaseConfig.apiKey === '';
+const isPlaceholder = !resolvedConfig || !resolvedConfig.apiKey || resolvedConfig.apiKey.includes('placeholder') || resolvedConfig.apiKey === '';
 
 let app;
 let db: any = null;
@@ -31,8 +55,10 @@ let useFirebase = false;
 
 if (!isPlaceholder) {
   try {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    app = getApps().length === 0 ? initializeApp(resolvedConfig) : getApp();
+    db = initializeFirestore(app, {
+      localCache: memoryLocalCache()
+    }, resolvedConfig.firestoreDatabaseId);
     auth = getAuth(app);
     useFirebase = true;
     console.log('Firebase initialized. Using real cloud database.');
@@ -142,12 +168,79 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-// 4. Verification Check
+// 4. Verification Check & Auto-Synchronization
+let hasSynced = false;
+
+async function syncLocalToFirebase() {
+  if (!useFirebase || !db || hasSynced) return;
+  hasSynced = true;
+  try {
+    console.log('Starting high-fidelity local-to-cloud synchronization...');
+
+    // 1. Sync registrations
+    const localRegs = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
+    if (localRegs.length > 0) {
+      const qSnap = await getDocs(collection(db, 'registrations'));
+      const firebaseIds = new Set(qSnap.docs.map(docSnap => docSnap.id));
+      for (const reg of localRegs) {
+        if (!firebaseIds.has(reg.id)) {
+          await setDoc(doc(db, 'registrations', reg.id), reg);
+          console.log('Synced registration to Firestore:', reg.id);
+        }
+      }
+    }
+
+    // 2. Sync vendors
+    const localVendors = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
+    if (localVendors.length > 0) {
+      const qSnap = await getDocs(collection(db, 'vendors'));
+      const firebaseIds = new Set(qSnap.docs.map(docSnap => docSnap.id));
+      for (const v of localVendors) {
+        if (!firebaseIds.has(v.id)) {
+          await setDoc(doc(db, 'vendors', v.id), v);
+          console.log('Synced vendor application to Firestore:', v.id);
+        }
+      }
+    }
+
+    // 3. Sync subscribers
+    const localSubs = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
+    if (localSubs.length > 0) {
+      const qSnap = await getDocs(collection(db, 'subscribers'));
+      const firebaseIds = new Set(qSnap.docs.map(docSnap => docSnap.id));
+      for (const s of localSubs) {
+        if (!firebaseIds.has(s.id)) {
+          await setDoc(doc(db, 'subscribers', s.id), s);
+          console.log('Synced newsletter subscriber to Firestore:', s.id);
+        }
+      }
+    }
+
+    // 4. Sync comments
+    const localComments = getLocalData<ConceptComment[]>(STORAGE_COMMENTS_KEY, []);
+    if (localComments.length > 0) {
+      const qSnap = await getDocs(collection(db, 'comments'));
+      const firebaseIds = new Set(qSnap.docs.map(docSnap => docSnap.id));
+      for (const c of localComments) {
+        if (!firebaseIds.has(c.id)) {
+          await setDoc(doc(db, 'comments', c.id), c);
+          console.log('Synced concept review to Firestore:', c.id);
+        }
+      }
+    }
+    
+    console.log('Local-to-cloud synchronization completed successfully.');
+  } catch (error) {
+    console.error('Error in syncLocalToFirebase:', error);
+  }
+}
+
 async function testConnection() {
   if (!useFirebase || !db) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.log('Tested Firestore server connection: OK');
+    await syncLocalToFirebase();
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn("Firestore client is offline. Falling back to local replication.");
@@ -155,6 +248,54 @@ async function testConnection() {
   }
 }
 testConnection();
+
+// Helper to invoke the server-side Google Sheet system synchronously (throwing on errors)
+async function saveToGoogleSheets(newReg: AttendeeRegistration) {
+  // Determine the backup ticket type based on registration properties
+  let ticketType = 'General Entry & Prize Draw';
+  if (newReg.vipInterest === 'Yes' || newReg.vipInterest === 'Maybe') {
+    ticketType = 'VIP Giveaway Entry & Priority Waitlist';
+  } else if (newReg.earlyTicketAccess === 'Yes') {
+    ticketType = 'Early Notification & Giveaway Entry';
+  }
+
+  // Determine car details formatting if applicable
+  let carRegistration = 'N/A';
+  if (newReg.carDetails) {
+    const { year, vehicleMake, vehicleModel, buildType } = newReg.carDetails;
+    carRegistration = `${year} ${vehicleMake} ${vehicleModel} (${buildType})`;
+  }
+
+  const backupPayload = {
+    id: newReg.id,
+    fullName: newReg.fullName,
+    email: newReg.email,
+    phoneNumber: newReg.phoneNumber,
+    ticketType,
+    carRegistration,
+    createdAt: newReg.createdAt
+  };
+
+  const response = await fetch('/api/backup-registration', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(backupPayload),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let errorMessage = `Server error ${response.status}`;
+    try {
+      const parsed = JSON.parse(errText);
+      errorMessage = parsed.error || parsed.message || errorMessage;
+    } catch {
+      if (errText) errorMessage = errText;
+    }
+    throw new Error(errorMessage);
+  }
+}
 
 // 5. Exposed Unified Database API
 export const storage = {
@@ -207,18 +348,27 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
-    // ALWAYS save to LocalStorage first to guarantee 100% data preservation and retention!
+    // 1. Save to Google Sheets first (as the primary backend database!)
+    try {
+      await saveToGoogleSheets(newReg);
+      console.log('Saved to Google Sheets successfully:', newReg.id);
+    } catch (error: any) {
+      console.error('Failed to save to Google Sheets:', error);
+      throw new Error(error.message || 'Failed to save registration to Google Sheets database. Check your environment configuration.');
+    }
+
+    // 2. Save to LocalStorage to guarantee data preservation and offline speed
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
     local.push(newReg);
     saveLocalData(STORAGE_REGISTRATIONS_KEY, local);
 
+    // 3. Optional: mirror to Firestore if active (for easy future migration!)
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, 'registrations', newReg.id), newReg);
-        console.log('Firebase registration saved successfully:', newReg.id);
+        console.log('Firebase registration mirrored successfully to registrations collection:', newReg.id);
       } catch (error) {
-        console.error('Firestore Error saving registration, fallback to local retention:', error);
-        // Do not throw! Returning the local copy guarantees success is retained.
+        console.warn('Firestore mirroring failed, but Google Sheets was successful:', error);
       }
     }
 

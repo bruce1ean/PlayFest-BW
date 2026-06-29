@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics } from '../types';
 import { storage } from '../lib/storage';
+import { sounds } from '../lib/sounds';
 
 const interestOptions = [
   { value: 'gaming', label: 'Gaming tournaments & Esports' },
@@ -430,7 +431,13 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveSubTab(tab.id as any)}
+                onClick={() => {
+                  sounds.playSelect();
+                  setActiveSubTab(tab.id as any);
+                }}
+                onMouseEnter={() => {
+                  sounds.playHover();
+                }}
                 className={`py-2 px-4 rounded-lg text-xs font-bold font-display uppercase tracking-wider flex items-center gap-2 shrink-0 cursor-pointer transition-all ${
                   activeSubTab === tab.id
                     ? 'bg-purple-600/30 text-purple-300 border border-purple-500/30 shadow'
