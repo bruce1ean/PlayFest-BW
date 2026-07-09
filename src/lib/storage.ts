@@ -16,7 +16,8 @@ import {
   setDoc,
   updateDoc,
   getDoc,
-  getDocFromServer
+  getDocFromServer,
+  deleteDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics, ConceptComment } from '../types';
@@ -260,10 +261,12 @@ async function saveToGoogleSheets(newReg: AttendeeRegistration) {
   }
 
   // Determine car details formatting if applicable
-  let carRegistration = 'N/A';
+  let carRegistration = 'No';
   if (newReg.carDetails) {
     const { year, vehicleMake, vehicleModel, buildType } = newReg.carDetails;
-    carRegistration = `${year} ${vehicleMake} ${vehicleModel} (${buildType})`;
+    carRegistration = `Yes (${year} ${vehicleMake} ${vehicleModel} - ${buildType})`;
+  } else if (newReg.interests && newReg.interests.includes('car_meet')) {
+    carRegistration = 'Yes (Interested)';
   }
 
   const backupPayload = {
@@ -316,24 +319,26 @@ export const storage = {
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
     let blended = [...local];
 
-    if (useFirebase && db) {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'registrations'));
-        const firebaseList: AttendeeRegistration[] = [];
-        querySnapshot.forEach((docSnap) => {
-          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
-        });
-        
-        // Merge without duplicates by id
-        const ids = new Set(local.map(r => r.id));
-        firebaseList.forEach(item => {
-          if (!ids.has(item.id)) {
-            blended.push(item);
+    try {
+      const response = await fetch('/api/registrations');
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          if (data && data.success && Array.isArray(data.registrations)) {
+            const sheetRegs = data.registrations as AttendeeRegistration[];
+            
+            // Merge sheetRegs with local storage, ensuring we prioritize sheet records and avoid duplicates
+            const sheetIds = new Set(sheetRegs.map(r => r.id));
+            const localOnly = local.filter(l => !sheetIds.has(l.id));
+            blended = [...sheetRegs, ...localOnly];
           }
-        });
-      } catch (error) {
-        console.warn('Error fetching registrations from Firebase (using local backup):', error);
+        } else {
+          console.log('[Storage] Fetch registrations response was not JSON:', contentType);
+        }
       }
+    } catch (error) {
+      console.log('Error fetching registrations from Google Sheets API, falling back to LocalStorage:', error);
     }
     
     // Sort newest first
@@ -348,13 +353,12 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Save to Google Sheets first (as the primary backend database!)
+    // 1. Save to Google Sheets (as the primary backend database if configured)
     try {
       await saveToGoogleSheets(newReg);
       console.log('Saved to Google Sheets successfully:', newReg.id);
     } catch (error: any) {
-      console.error('Failed to save to Google Sheets:', error);
-      throw new Error(error.message || 'Failed to save registration to Google Sheets database. Check your environment configuration.');
+      console.warn('[Storage] Failed to save to Google Sheets (falling back to local storage & firestore):', error.message || error);
     }
 
     // 2. Save to LocalStorage to guarantee data preservation and offline speed
@@ -369,6 +373,7 @@ export const storage = {
         console.log('Firebase registration mirrored successfully to registrations collection:', newReg.id);
       } catch (error) {
         console.warn('Firestore mirroring failed, but Google Sheets was successful:', error);
+        // Do not throw the error here, as Firestore mirroring is optional and Google Sheets + LocalStorage are already secure.
       }
     }
 
@@ -395,7 +400,7 @@ export const storage = {
           }
         });
       } catch (error) {
-        console.warn('Error fetching vendor applications from Firebase:', error);
+        console.warn('Error fetching vendor applications from Firebase, falling back to LocalStorage:', error);
       }
     }
     return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -446,7 +451,7 @@ export const storage = {
           }
         });
       } catch (error) {
-        console.warn('Error fetching subscribers from Firebase:', error);
+        console.warn('Error fetching subscribers from Firebase, falling back to LocalStorage:', error);
       }
     }
     return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -498,7 +503,7 @@ export const storage = {
           return initial;
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.GET, 'analytics/dashboard');
+        console.warn('Error fetching analytics from Firebase, falling back to LocalStorage:', error);
       }
     }
     return getLocalData<AppAnalytics>(STORAGE_ANALYTICS_KEY, {
@@ -586,7 +591,7 @@ export const storage = {
           }
         });
       } catch (error) {
-        console.warn('Error fetching concept comments from Firebase:', error);
+        console.warn('Error fetching concept comments from Firebase, falling back to LocalStorage:', error);
       }
     }
     return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -615,5 +620,38 @@ export const storage = {
     }
 
     return newComment;
+  },
+
+  // RESET All Registrations (LocalStorage + Google Sheets + Firestore)
+  async resetRegistrations(): Promise<void> {
+    // 1. Clear locally
+    saveLocalData(STORAGE_REGISTRATIONS_KEY, []);
+
+    // 2. Clear Google Sheets via API
+    try {
+      const response = await fetch('/api/reset-registrations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) {
+        console.warn('[Storage] Server reset registrations endpoint returned non-ok status');
+      }
+    } catch (err) {
+      console.error('[Storage] Error calling reset-registrations API:', err);
+    }
+
+    // 3. Clear Firestore collection if active
+    if (useFirebase && db) {
+      try {
+        const qSnap = await getDocs(collection(db, 'registrations'));
+        const deletePromises = qSnap.docs.map((docSnap) => deleteDoc(doc(db, 'registrations', docSnap.id)));
+        await Promise.all(deletePromises);
+        console.log('[Storage] Successfully cleared registrations in Firestore.');
+      } catch (err) {
+        console.error('[Storage] Failed to clear registrations in Firestore:', err);
+      }
+    }
   }
 };

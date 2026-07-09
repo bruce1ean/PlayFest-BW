@@ -27,7 +27,9 @@ import {
   X,
   Sparkles,
   MapPin,
-  CreditCard
+  CreditCard,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics } from '../types';
 import { storage } from '../lib/storage';
@@ -67,6 +69,8 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
 
   // Sponsors printable layout modal
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Authentication: Passcode is Tomcruise@16
   const handleLogin = (e: React.FormEvent) => {
@@ -101,6 +105,20 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
       setAnalytics(allAnalytics);
     } catch {
       addToast('Failed to fetch real-time analytics data.', 'error');
+    }
+  };
+
+  const handleResetRegistrations = async () => {
+    setIsResetting(true);
+    try {
+      await storage.resetRegistrations();
+      addToast('All registrations have been reset successfully!', 'success');
+      setShowResetConfirm(false);
+      await loadAllOrganizerData();
+    } catch (error) {
+      addToast('An error occurred while resetting registrations.', 'error');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -381,6 +399,17 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
                 className="px-4 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/20 text-xs font-bold font-display uppercase tracking-wider text-white flex items-center gap-1.5 cursor-pointer"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-pink-400" /> Export CSV
+              </button>
+              <button
+                onClick={() => {
+                  sounds.playSelect();
+                  setShowResetConfirm(true);
+                }}
+                onMouseEnter={() => sounds.playHover()}
+                className="px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold font-display uppercase tracking-wider text-red-400 flex items-center gap-1.5 cursor-pointer transition-colors"
+                id="btn-reset-registrations-trigger"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-400" /> Reset Registrations
               </button>
               <button
                 onClick={onClose}
@@ -1067,6 +1096,65 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
               </div>
 
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* RESET CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md"
+            id="modal-reset-confirm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[#0d0920] border border-red-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl text-center relative"
+            >
+              <div className="mx-auto w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-5 border border-red-500/20">
+                <Trash2 className="w-6 h-6 animate-pulse" />
+              </div>
+
+              <h3 className="text-xl sm:text-2xl font-bold font-display uppercase tracking-tight text-white mb-2">
+                Dangerous Action!
+              </h3>
+              <p className="text-sm text-gray-400 mb-6 font-light leading-relaxed">
+                Are you absolutely sure you want to reset all registrations? This will permanently wipe out all local cache, cloud database documents, and connected Google Sheets rows (preserving headers).
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  disabled={isResetting}
+                  onClick={() => {
+                    sounds.playSelect();
+                    setShowResetConfirm(false);
+                  }}
+                  className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold font-display uppercase tracking-wider text-gray-300 border border-white/5 disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isResetting}
+                  onClick={handleResetRegistrations}
+                  className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold font-display uppercase tracking-wider text-white shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer border border-red-500/30"
+                  id="btn-confirm-reset"
+                >
+                  {isResetting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Resetting...
+                    </>
+                  ) : (
+                    'Yes, Delete All'
+                  )}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

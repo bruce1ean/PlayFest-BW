@@ -8,6 +8,7 @@ import { motion } from 'motion/react';
 import { User, Lock, Mail, ArrowRight, Sparkles, Loader2, Key, ChevronRight, HelpCircle } from 'lucide-react';
 import { storage } from '../lib/storage';
 import { sounds } from '../lib/sounds';
+import { loginUser } from '../lib/firebase';
 
 interface LoginPageProps {
   onSuccessAttendee: (details: any) => void;
@@ -24,6 +25,7 @@ export default function LoginPage({
 }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<'attendee' | 'organizer'>('attendee');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [passcode, setPasscode] = useState('');
   const [loading, setLoading] = useState(false);
   const [hoveredField, setHoveredField] = useState<string>('email');
@@ -42,18 +44,28 @@ export default function LoginPage({
       addToast('Please enter your email address.', 'error');
       return;
     }
+    if (!password) {
+      sounds.playCancel();
+      addToast('Please enter your account password.', 'error');
+      return;
+    }
 
     setLoading(true);
     storage.trackClick('btn-login-attendee-submit');
     sounds.playSelect();
 
     try {
+      // 1. Authenticate with Firebase first
+      const credential = await loginUser(email.trim(), password);
+      console.log('Firebase user logged in successfully:', credential.user?.uid);
+      
+      // 2. Fetch their details from local/database registrations
       const regs = await storage.getRegistrations();
       const match = regs.find((r) => r.email.toLowerCase() === email.trim().toLowerCase());
 
       if (match) {
         sounds.playSuccess();
-        addToast('Ticket retrieved successfully! Welcome to PlayFest 2026.', 'success');
+        addToast('Welcome back! Your ticket has been retrieved successfully.', 'success');
         onSuccessAttendee(match);
       } else {
         const vendors = await storage.getVendorApplications();
@@ -61,16 +73,43 @@ export default function LoginPage({
 
         if (vendorMatch) {
           sounds.playSuccess();
-          addToast('Vendor details retrieved successfully!', 'success');
+          addToast('Welcome back! Your vendor application was retrieved successfully.', 'success');
           onSuccessAttendee(vendorMatch);
         } else {
-          sounds.playCancel();
-          addToast('No registration or application found with this email. Create one below!', 'error');
+          // If they authenticated but have no details recorded yet, construct a basic player object
+          sounds.playSuccess();
+          addToast('Logged in successfully! Welcome to PlayFest.', 'success');
+          onSuccessAttendee({
+            id: credential.user.uid,
+            fullName: email.split('@')[0],
+            email: email.trim(),
+            phone: 'N/A',
+            city: 'N/A',
+            interests: ['General Interest'],
+          });
         }
       }
-    } catch (err) {
+    } catch (authErr: any) {
       sounds.playCancel();
-      addToast('Error retrieving registration details. Please try again.', 'error');
+      if (authErr.code === 'auth/operation-not-allowed') {
+        console.warn('Firebase Email/Password Authentication is not enabled in your Firebase project. Please enable it in the Firebase Console (Authentication > Sign-in method).');
+      } else {
+        console.error('Firebase Auth Login failed:', authErr);
+      }
+      
+      let friendlyMessage = 'Authentication failed. Please check your credentials.';
+      if (authErr.code === 'auth/wrong-password') {
+        friendlyMessage = 'Incorrect password. Please try again.';
+      } else if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
+        friendlyMessage = 'No account found with this email, or invalid credentials. Please check your spelling or register.';
+      } else if (authErr.code === 'auth/invalid-email') {
+        friendlyMessage = 'Invalid email address format.';
+      } else if (authErr.code === 'auth/operation-not-allowed') {
+        friendlyMessage = 'Firebase Email/Password sign-in is disabled. Please enable it under Authentication > Sign-in method in your Firebase Console.';
+      } else if (authErr.message) {
+        friendlyMessage = authErr.message;
+      }
+      addToast(friendlyMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -103,6 +142,7 @@ export default function LoginPage({
 
   const fieldHelpMap: Record<string, string> = {
     email: 'ENTER SECURE COMMUNICATIVE MAILBOX: Input the email address you originally provided during custom RSVP registration or stall application to retrieve your digital entry passes.',
+    password: 'ENTER SECURITY PASSWORD: Input the password associated with your player account to authenticate with Firebase database modules.',
     passcode: 'ORC KEYS: Authorized staff must submit their encrypted municipal command console codes to decrypt registrations & spreadsheet pipelines.',
     rsvp_tab: 'SWITCH TO ENTHUSIAST PASS RETRIEVAL: Search for existing free player passes, tuner garage details, or registered gaming titles.',
     org_tab: 'SWITCH TO STAFF GATEWAY: Access terminal dashboards for attendee check-ins, vendor logistics, and system telemetry stats.'
@@ -198,6 +238,28 @@ export default function LoginPage({
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="e.g. thabo@example.co.bw"
                     className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-600 focus:border-pink-500 focus:outline-none text-sm transition-all font-sans"
+                  />
+                </div>
+              </div>
+
+              <div 
+                className="space-y-2"
+                onMouseEnter={() => setHoveredField('password')}
+              >
+                <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-gray-400">
+                  SECURE PASSWORD
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-600 focus:border-pink-500 focus:outline-none text-sm transition-all"
                   />
                 </div>
               </div>

@@ -38,8 +38,8 @@ service cloud.firestore {
 
     // Comments rule
     match /comments/{commentId} {
-      allow create: if request.resource.data.text is string &&
-                    request.resource.data.text.size() <= 1000;
+      allow create: if request.resource.data.comment is string &&
+                    request.resource.data.comment.size() <= 1000;
       allow read: if true;
       allow update, delete: if request.auth != null;
     }

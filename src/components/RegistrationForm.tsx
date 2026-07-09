@@ -19,11 +19,13 @@ import {
   Loader2, 
   ArrowRight, 
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-react';
 import { AttendeeRegistration, VendorApplication } from '../types';
 import { storage } from '../lib/storage';
 import { sounds } from '../lib/sounds';
+import { registerUser } from '../lib/firebase';
 
 interface RegistrationFormProps {
   onSuccess: (data: AttendeeRegistration | VendorApplication, type: 'attendee' | 'vendor') => void;
@@ -34,11 +36,14 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
   const [activeTab, setActiveTab] = useState<'attendee' | 'vendor'>('attendee');
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [authDisabledWarning, setAuthDisabledWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Attendee Form State ---
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [dialCode, setDialCode] = useState('+267');
   const [customDialCode, setCustomDialCode] = useState('');
@@ -177,14 +182,24 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
 
   // --- Step 1 Navigation Validations ---
   const validateAttendeeStep1 = () => {
-    if (!fullName.trim() || !email.trim() || !phone.trim() || !city.trim()) {
-      addToast('Please fill out all required personal details.', 'error');
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !city.trim() || !password || !confirmPassword) {
+      addToast('Please fill out all required personal details and set your account password.', 'error');
       return false;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       addToast('Please enter a valid email address.', 'error');
+      return false;
+    }
+
+    if (password.length < 6) {
+      addToast('Password must be at least 6 characters long.', 'error');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      addToast('Passwords do not match.', 'error');
       return false;
     }
 
@@ -246,7 +261,43 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
     }
 
     setSubmitting(true);
+    setAuthDisabledWarning(false);
     try {
+      // 1. Register the user with Firebase Auth first
+      let userCredential = null;
+      try {
+        userCredential = await registerUser(email.trim(), password);
+        console.log('Firebase registration successful:', userCredential.user?.uid);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/operation-not-allowed') {
+          console.warn('Firebase Email/Password Authentication is not enabled in your Firebase project. Please enable it in the Firebase Console (Authentication > Sign-in method).');
+          setAuthDisabledWarning(true);
+        } else {
+          console.error('Firebase Auth error during registration:', authErr);
+        }
+        
+        // Handle standard user-input validation errors synchronously by blocking
+        if (authErr.code === 'auth/email-already-in-use') {
+          addToast('This email address is already registered. Please login instead.', 'error');
+          setSubmitting(false);
+          return;
+        } else if (authErr.code === 'auth/invalid-email') {
+          addToast('Invalid email address format.', 'error');
+          setSubmitting(false);
+          return;
+        } else if (authErr.code === 'auth/weak-password') {
+          addToast('The password is too weak. It must be at least 6 characters.', 'error');
+          setSubmitting(false);
+          return;
+        } else if (authErr.code === 'auth/operation-not-allowed') {
+          // If Email/Password provider is disabled, display configuration guide & proceed in fallback mode
+          addToast('Firebase Email/Password sign-in is disabled. Registering in fallback mode. Please enable it in your Firebase Console.', 'info');
+        } else {
+          // General connection/config issues: log and proceed
+          addToast(`Firebase Auth unavailable: ${authErr.message || authErr}. Completing registration in fallback mode.`, 'info');
+        }
+      }
+
       const interestsToSend = selectedInterests.length > 0 ? selectedInterests : ['General Interest'];
       
       const activeDial = dialCode === 'Other' ? (customDialCode.trim() || '+') : dialCode;
@@ -423,7 +474,7 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
             />
           </div>
           <button
-            disabled={step === 1 && !(activeTab === 'attendee' ? fullName && email && phone : vendorBusiness && vendorContact)}
+            disabled={step === 1 && !(activeTab === 'attendee' ? fullName && email && phone && city && password && confirmPassword : vendorBusiness && vendorContact && vendorPhone && vendorEmail)}
             onClick={() => {
               if (step === 1) {
                 if (activeTab === 'attendee' ? validateAttendeeStep1() : validateVendorStep1()) {
@@ -435,7 +486,7 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
               }
             }}
             onMouseEnter={() => {
-              if (step === 1 && (activeTab === 'attendee' ? fullName && email && phone : vendorBusiness && vendorContact)) {
+              if (step === 1 && (activeTab === 'attendee' ? fullName && email && phone && city && password && confirmPassword : vendorBusiness && vendorContact && vendorPhone && vendorEmail)) {
                 sounds.playHover();
               }
             }}
@@ -449,6 +500,21 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
       {/* Forms Area wrapper */}
       <div className="rounded-3xl bg-glassmorphism border border-white/5 shadow-2xl relative overflow-hidden p-6 sm:p-10">
         <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 opacity-60" />
+        
+        {authDisabledWarning && (
+          <div className="mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-400">
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span>Firebase Email/Password Provider is Disabled</span>
+            </div>
+            <p className="leading-relaxed opacity-90">
+              The Firebase project owner needs to enable the <strong>Email/Password</strong> sign-in method under the <strong>Sign-in method</strong> tab of the <strong>Authentication</strong> section in the <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="underline text-amber-300 hover:text-amber-100 font-bold">Firebase Console</a>.
+            </p>
+            <p className="text-xs opacity-80">
+              Registration completed successfully in <strong>Guest Fallback mode</strong>, but you will not be able to log back in using this password until Email/Password authentication is enabled in Firebase Console.
+            </p>
+          </div>
+        )}
         
         <AnimatePresence mode="wait">
           {activeTab === 'attendee' ? (
@@ -491,6 +557,34 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="e.g. thabo@example.com"
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
+                        Password <span className="text-pink-500">*</span>
+                      </label>
+                      <input
+                        required
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
+                        Confirm Password <span className="text-pink-500">*</span>
+                      </label>
+                      <input
+                        required
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
                         className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white focus:border-pink-500/60 focus:outline-none focus:ring-1 focus:ring-pink-500/30 transition-all font-light text-sm"
                       />
                     </div>
@@ -712,7 +806,6 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                           Vehicle Make <span className="text-pink-500">*</span>
                         </label>
                         <input
-                          required
                           type="text"
                           value={carMake}
                           onChange={(e) => setCarMake(e.target.value)}
@@ -726,7 +819,6 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                           Vehicle Model <span className="text-pink-500">*</span>
                         </label>
                         <input
-                          required
                           type="text"
                           value={carModel}
                           onChange={(e) => setCarModel(e.target.value)}
@@ -740,7 +832,6 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                           Year of manufacture <span className="text-pink-500">*</span>
                         </label>
                         <input
-                          required
                           type="text"
                           value={carYear}
                           onChange={(e) => setCarYear(e.target.value)}
@@ -872,7 +963,6 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                           Favorite Games <span className="text-pink-500">*</span>
                         </label>
                         <input
-                          required
                           type="text"
                           value={gamingGames}
                           onChange={(e) => setGamingGames(e.target.value)}
@@ -1063,10 +1153,9 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
 
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-1.5 font-mono">
-                        Your Thought / Suggestion / Review <span className="text-pink-500">*</span>
+                        Your Thought / Suggestion / Review (Optional)
                       </label>
                       <textarea
-                        required
                         rows={3}
                         maxLength={400}
                         placeholder="Would you attend? What is your favorite attraction? Any specific ideas for gaming, cars, tuning or artists for Gaborone Botswana?"
@@ -1340,7 +1429,6 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                         Describe your products or services <span className="text-pink-500">*</span>
                       </label>
                       <textarea
-                        required
                         value={vendorProducts}
                         onChange={(e) => setVendorProducts(e.target.value)}
                         placeholder="List menu items, apparel description, or equipment you aim to sell/exhibit."
