@@ -250,53 +250,65 @@ async function testConnection() {
 }
 testConnection();
 
-// Helper to invoke the server-side Google Sheet system synchronously (throwing on errors)
+// Helper to invoke the server-side Google Sheet system synchronously (falling back gracefully on errors)
 async function saveToGoogleSheets(newReg: AttendeeRegistration) {
-  // Determine the backup ticket type based on registration properties
-  let ticketType = 'General Entry & Prize Draw';
-  if (newReg.vipInterest === 'Yes' || newReg.vipInterest === 'Maybe') {
-    ticketType = 'VIP Giveaway Entry & Priority Waitlist';
-  } else if (newReg.earlyTicketAccess === 'Yes') {
-    ticketType = 'Early Notification & Giveaway Entry';
-  }
-
-  // Determine car details formatting if applicable
-  let carRegistration = 'No';
-  if (newReg.carDetails) {
-    const { year, vehicleMake, vehicleModel, buildType } = newReg.carDetails;
-    carRegistration = `Yes (${year} ${vehicleMake} ${vehicleModel} - ${buildType})`;
-  } else if (newReg.interests && newReg.interests.includes('car_meet')) {
-    carRegistration = 'Yes (Interested)';
-  }
-
-  const backupPayload = {
-    id: newReg.id,
-    fullName: newReg.fullName,
-    email: newReg.email,
-    phoneNumber: newReg.phoneNumber,
-    ticketType,
-    carRegistration,
-    createdAt: newReg.createdAt
-  };
-
-  const response = await fetch('/api/backup-registration', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(backupPayload),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    let errorMessage = `Server error ${response.status}`;
-    try {
-      const parsed = JSON.parse(errText);
-      errorMessage = parsed.error || parsed.message || errorMessage;
-    } catch {
-      if (errText) errorMessage = errText;
+  try {
+    // Determine the backup ticket type based on registration properties
+    let ticketType = 'General Entry & Prize Draw';
+    if (newReg.vipInterest === 'Yes' || newReg.vipInterest === 'Maybe') {
+      ticketType = 'VIP Giveaway Entry & Priority Waitlist';
+    } else if (newReg.earlyTicketAccess === 'Yes') {
+      ticketType = 'Early Notification & Giveaway Entry';
     }
-    throw new Error(errorMessage);
+
+    // Determine car details formatting if applicable
+    let carRegistration = 'No';
+    if (newReg.carDetails) {
+      const { year, vehicleMake, vehicleModel, buildType } = newReg.carDetails;
+      carRegistration = `Yes (${year} ${vehicleMake} ${vehicleModel} - ${buildType})`;
+    } else if (newReg.interests && newReg.interests.includes('car_meet')) {
+      carRegistration = 'Yes (Interested)';
+    }
+
+    const backupPayload = {
+      id: newReg.id,
+      fullName: newReg.fullName,
+      email: newReg.email,
+      phoneNumber: newReg.phoneNumber,
+      ticketType,
+      carRegistration,
+      createdAt: newReg.createdAt
+    };
+
+    const response = await fetch('/api/backup-registration', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(backupPayload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let errorMessage = `Server error ${response.status}`;
+      try {
+        const parsed = JSON.parse(errText);
+        errorMessage = parsed.error || parsed.message || errorMessage;
+      } catch {
+        // If it's a Vercel 404 HTML or other non-JSON response, don't spam the raw HTML
+        if (errText && !errText.trim().startsWith('<')) {
+          errorMessage = errText;
+        } else {
+          errorMessage = `Endpoint returned status ${response.status} (possibly not configured or running in a static-only environment)`;
+        }
+      }
+      console.warn('[Storage/Google Sheets] Backup endpoint returned non-ok status:', errorMessage);
+      return;
+    }
+
+    console.log('[Storage/Google Sheets] Registration successfully backed up to Google Sheets:', newReg.id);
+  } catch (error: any) {
+    console.warn('[Storage/Google Sheets] Failed to connect to Google Sheets backup endpoint:', error.message || error);
   }
 }
 
