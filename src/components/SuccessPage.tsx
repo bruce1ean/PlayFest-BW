@@ -23,7 +23,8 @@ import {
   Flame,
   Award,
   MapPin,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from 'lucide-react';
 import { storage } from '../lib/storage';
 import { sounds } from '../lib/sounds';
@@ -31,7 +32,9 @@ import {
   initAuth, 
   googleSignIn, 
   logout as googleLogout, 
-  addPlayFestEventToCalendar 
+  addPlayFestEventToCalendar,
+  getGmailProfile,
+  sendPlayFestEmailWithGmail
 } from '../lib/googleCalendar';
 
 interface SuccessPageProps {
@@ -55,6 +58,12 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
   const [isCalendarAdded, setIsCalendarAdded] = useState(false);
   const [hoveredField, setHoveredField] = useState<string>('ticket');
 
+  // Gmail Sync States
+  const [gmailAddress, setGmailAddress] = useState<string | null>(null);
+  const [gmailRecipient, setGmailRecipient] = useState<string>('');
+  const [gmailSubject, setGmailSubject] = useState<string>('🎟️ My PlayFest 2026 Botswana Entry Pass!');
+  const [isGmailSending, setIsGmailSending] = useState(false);
+
   const name = registeredDetails?.fullName || registeredDetails?.businessName || 'Friend';
   const city = registeredDetails?.city || 'Gaborone';
   const idBadge = registeredDetails?.id || `PF-${Math.floor(Math.random() * 9000 + 1000)}`;
@@ -72,13 +81,23 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
   // Initialize auth listener
   useEffect(() => {
     const unsubscribe = initAuth(
-      (user, token) => {
+      async (user, token) => {
         setGoogleUser(user);
         setGoogleAccessToken(token);
+        try {
+          const profile = await getGmailProfile(token);
+          if (profile && profile.emailAddress) {
+            setGmailAddress(profile.emailAddress);
+            setGmailRecipient(profile.emailAddress);
+          }
+        } catch (err) {
+          console.error('Error loading Gmail profile on load:', err);
+        }
       },
       () => {
         setGoogleUser(null);
         setGoogleAccessToken(null);
+        setGmailAddress(null);
       }
     );
     return () => {
@@ -95,7 +114,17 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
         setGoogleUser(result.user);
         setGoogleAccessToken(result.accessToken);
         sounds.playSuccess();
-        addToast('Connected with Google Calendar safely!', 'success');
+        addToast('Connected with Google securely!', 'success');
+        
+        try {
+          const profile = await getGmailProfile(result.accessToken);
+          if (profile && profile.emailAddress) {
+            setGmailAddress(profile.emailAddress);
+            setGmailRecipient(profile.emailAddress);
+          }
+        } catch (profileErr) {
+          console.error('Error fetching Gmail profile on sign-in:', profileErr);
+        }
       }
     } catch (err: any) {
       console.error(err);
@@ -112,6 +141,8 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
       await googleLogout();
       setGoogleUser(null);
       setGoogleAccessToken(null);
+      setGmailAddress(null);
+      setGmailRecipient('');
       setIsCalendarAdded(false);
       sounds.playSuccess();
       addToast('Google account disconnected.', 'info');
@@ -152,6 +183,95 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
       addToast('Scheduling failed. Please verify grant permissions.', 'error');
     } finally {
       setIsCalendarAdding(false);
+    }
+  };
+
+  const handleSendGmail = async () => {
+    if (!googleAccessToken) {
+      sounds.playCancel();
+      addToast('Please connect your Google account first.', 'error');
+      return;
+    }
+
+    if (!gmailRecipient.trim()) {
+      sounds.playCancel();
+      addToast('Please enter a recipient email address.', 'error');
+      return;
+    }
+
+    const confirmSend = window.confirm(
+      `Would you like to authorize PlayFest to send an email to "${gmailRecipient}" using your authentic Gmail account?`
+    );
+    if (!confirmSend) {
+      sounds.playCancel();
+      return;
+    }
+
+    setIsGmailSending(true);
+    sounds.playSelect();
+
+    // Compose HTML Message
+    let htmlContent = '';
+    const isSelfDispatch = gmailRecipient.trim().toLowerCase() === (gmailAddress || googleUser?.email || '').trim().toLowerCase();
+
+    if (isSelfDispatch) {
+      htmlContent = `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0c071e; color: #e2e8f0; padding: 30px; border-radius: 12px; max-width: 600px; margin: auto; border: 1px solid rgba(236,72,153,0.15);">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #ec4899; margin: 0; font-size: 28px; text-transform: uppercase; letter-spacing: 2px;">PLAYFEST 2026</h1>
+            <p style="margin: 5px 0 0 0; color: #06b6d4; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Gaborone, Botswana</p>
+          </div>
+          
+          <p>Hello <strong>${name}</strong>,</p>
+          <p>Here is your digital entry badge copy for <strong>PlayFest 2026 Gaborone</strong>, sent securely via the Gmail API.</p>
+          
+          <div style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #ec4899; text-transform: uppercase; letter-spacing: 1px;">ENTRY BADGE ACCESS DETAILS</h3>
+            <p style="margin: 8px 0; font-size: 14px;"><strong>Player Handle:</strong> ${name}</p>
+            <p style="margin: 8px 0; font-size: 14px;"><strong>Registration Serial:</strong> <span style="color: #06b6d4; font-family: monospace; font-weight: bold; font-size: 16px;">${idBadge}</span></p>
+            <p style="margin: 8px 0; font-size: 14px;"><strong>Access Category:</strong> ${priority}</p>
+            <p style="margin: 8px 0; font-size: 14px;"><strong>Destination:</strong> ${city}, BW</p>
+          </div>
+          
+          <p style="font-size: 13px; color: #94a3b8; text-align: center; margin-top: 25px;">Please keep your unique serial number safe. Present this digital ticket copy or show your registration ID at the gate.</p>
+          
+          <div style="text-align: center; margin-top: 25px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+            <p style="font-size: 11px; color: #64748b; margin: 0;">© 2026 PlayFest Botswana. Sent with user permission via secure Google Integration.</p>
+          </div>
+        </div>
+      `;
+    } else {
+      htmlContent = `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0c071e; color: #e2e8f0; padding: 30px; border-radius: 12px; max-width: 600px; margin: auto; border: 1px solid rgba(139,92,246,0.15);">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #8b5cf6; margin: 0; font-size: 28px; text-transform: uppercase; letter-spacing: 2px;">PLAYFEST 2026</h1>
+            <p style="margin: 5px 0 0 0; color: #ec4899; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;"> Botswana's Elite Festival Calling</p>
+          </div>
+          
+          <p>Hello,</p>
+          <p>Your friend <strong>${name}</strong> has invited you to join them for the landmark staging of <strong>PlayFest 2026 Gaborone</strong>!</p>
+          
+          <p>PlayFest is Botswana's premier festival collision of automotive stance tuning, gaming arenas, electronic soundwaves, and pop culture apparel.</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${window.location.origin}" style="display: inline-block; background: #ec4899; color: #ffffff; text-decoration: none; padding: 14px 28px; font-weight: bold; border-radius: 8px; text-transform: uppercase; font-size: 13px; letter-spacing: 1.5px; box-shadow: 0 4px 15px rgba(236,72,153,0.4);">RSVP For Free Now</a>
+          </div>
+          
+          <p style="font-size: 12px; color: #64748b; text-align: center; margin-top: 25px;">This invite was sent securely via Gmail on behalf of ${name}.</p>
+        </div>
+      `;
+    }
+
+    try {
+      await sendPlayFestEmailWithGmail(googleAccessToken, gmailRecipient, gmailSubject, htmlContent);
+      sounds.playSuccess();
+      addToast(`Email successfully sent using your Gmail account!`, 'success');
+    } catch (err: any) {
+      console.error('Gmail send error:', err);
+      sounds.playCancel();
+      addToast(`Gmail Dispatch failed. Please try again.`, 'error');
+    } finally {
+      setIsGmailSending(false);
     }
   };
 
@@ -215,6 +335,7 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
   const helpMap: Record<string, string> = {
     ticket: 'VERIFIED PLAYFEST ENTRY PASS: This is your dynamic Gaborone digital badge. Protect your Serial Number. It secures your slot in our VIP Pass draw & waitlists.',
     calendar: 'SYNCHRONIZE TO GOOGLE CALENDAR: Integrate PlayFest 2026 (Nov 20-22, 2026) directly with your personal Google Agenda to stay alerted on venue releases.',
+    gmail: 'GMAIL DISPATCH CONTROL: Use Gmail API to securely dispatch your digital ticket copy directly to your inbox or invite a friend via email.',
     share: 'SHARE STATUS & GAIN INFLUENCE: Amplify PlayFest across WhatsApp or X to secure priority waitlist points and unlock secret automotive tuning updates.',
     return: 'RETURN TO MAIN CONSOLE: Exit the secure entry dispatch portal and navigate back to the primary PlayFest Botswana landing console.'
   };
@@ -281,6 +402,27 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
               <span className="flex items-center gap-2">
                 <ChevronRight className={`w-3.5 h-3.5 ${hoveredField === 'calendar' ? 'text-[#ec4899]' : 'opacity-0'}`} />
                 GOOGLE CALENDAR SYNC
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                sounds.playSelect();
+                setHoveredField('gmail');
+              }}
+              onMouseEnter={() => {
+                sounds.playHover();
+                setHoveredField('gmail');
+              }}
+              className={`w-full text-left py-3 px-4 rounded-lg font-display text-xs font-black tracking-widest uppercase transition-all duration-150 flex items-center justify-between border cursor-pointer ${
+                hoveredField === 'gmail'
+                  ? 'bg-white text-black border-white translate-x-3 shadow-[0_0_20px_rgba(255,255,255,0.4)]'
+                  : 'bg-black/50 hover:bg-black/75 text-gray-400 border-white/5 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <ChevronRight className={`w-3.5 h-3.5 ${hoveredField === 'gmail' ? 'text-[#ec4899]' : 'opacity-0'}`} />
+                GMAIL BADGE DISPATCH
               </span>
             </button>
 
@@ -494,6 +636,150 @@ export default function SuccessPage({ registrationType, registeredDetails, onBac
                     {isCalendarAdding ? 'SCHEDULING...' : 'ADD FESTIVAL CALENDAR EVENT'}
                   </button>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* GMAIL DISPATCH SHEET */}
+          <div 
+            className="bg-black/60 border border-white/5 p-5 rounded-2xl backdrop-blur-md shadow-2xl relative"
+            onMouseEnter={() => setHoveredField('gmail')}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Mail className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-mono font-bold uppercase tracking-widest text-white">
+                GMAIL DISPATCH CONTROL
+              </span>
+            </div>
+
+            <p className="text-xs text-gray-400 mb-4 leading-relaxed font-light">
+              Securely authorize PlayFest to dispatch your digital badge pass or send a priority invite code directly via your authentic Google Gmail account.
+            </p>
+
+            {!googleAccessToken ? (
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={isSigningIn}
+                className="w-full py-3 px-4 rounded-xl bg-white hover:bg-pink-500 text-black hover:text-white font-display font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2.5 shadow-md cursor-pointer hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#EA4335" d="M12.24 10.285V14.4h6.887a5.555 5.555 0 0 1-2.4 3.665l3.77 2.925c2.203-2.03 3.472-5.016 3.472-8.56a12.593 12.593 0 0 0-.21-2.145H12.24Z" />
+                  <path fill="#4285F4" d="M12.24 24c3.24 0 5.95-1.075 7.93-2.915l-3.77-2.925c-1.045.7-2.385 1.115-3.93 1.115-3.03 0-5.59-2.045-6.51-4.8l-3.9 3.015C4.03 21.09 7.79 24 12.24 24Z" />
+                  <path fill="#34A853" d="M5.73 14.475a7.11 7.11 0 0 1 0-4.59l-3.9-3.015a11.96 11.96 0 0 0 0 10.62l3.9-3.015Z" />
+                  <path fill="#FBBC05" d="M12.24 4.8c1.765 0 3.35.61 4.595 1.795l3.435-3.435C18.19 1.19 15.48 0 12.24 0 7.79 0 4.03 2.91 2.06 6.87l3.9 3.015c.92-2.755 3.48-4.8 6.51-4.8Z" />
+                </svg>
+                {isSigningIn ? 'CONNECTING...' : 'CONNECT GMAIL WITH GOOGLE'}
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 bg-white/5 flex items-center justify-center">
+                      {googleUser?.photoURL ? (
+                        <img 
+                          src={googleUser.photoURL} 
+                          alt={googleUser.displayName || 'OAuth Account'} 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      ) : (
+                        <User className="w-4 h-4 text-cyan-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-white truncate max-w-[150px]">
+                        {googleUser?.displayName || 'Google Account'}
+                      </div>
+                      <div className="text-[10px] text-gray-400 truncate max-w-[180px] font-mono">
+                        {gmailAddress ? `Gmail: ${gmailAddress}` : 'Connecting...'}
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleSignOut} 
+                    className="text-[9px] text-[#ec4899] hover:text-pink-400 transition-colors font-mono uppercase block self-start sm:self-center cursor-pointer hover:underline"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+
+                <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-3.5">
+                  <div className="text-[10px] font-mono font-bold tracking-wider text-[#ec4899] uppercase">
+                    DISPATCH OPTION SELECTOR
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        sounds.playSelect();
+                        setGmailRecipient(gmailAddress || googleUser?.email || '');
+                        setGmailSubject('🎟️ My PlayFest 2026 Botswana Entry Pass!');
+                      }}
+                      className={`py-2 px-3 rounded-lg text-[10px] font-mono font-bold tracking-wide transition-all uppercase border cursor-pointer text-center ${
+                        gmailRecipient.trim().toLowerCase() === (gmailAddress || googleUser?.email || '').trim().toLowerCase()
+                          ? 'bg-cyan-500 text-black border-cyan-500'
+                          : 'bg-white/5 text-gray-300 border-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                      Self-Dispatch
+                    </button>
+                    <button
+                      onClick={() => {
+                        sounds.playSelect();
+                        setGmailRecipient('');
+                        setGmailSubject('🎮 You\'re invited to PlayFest 2026 Gaborone!');
+                      }}
+                      className={`py-2 px-3 rounded-lg text-[10px] font-mono font-bold tracking-wide transition-all uppercase border cursor-pointer text-center ${
+                        gmailRecipient.trim().toLowerCase() !== (gmailAddress || googleUser?.email || '').trim().toLowerCase()
+                          ? 'bg-cyan-500 text-black border-cyan-500'
+                          : 'bg-white/5 text-gray-300 border-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                      Invite a Friend
+                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-gray-400 uppercase block">Recipient Email Address</label>
+                    <input
+                      type="email"
+                      value={gmailRecipient}
+                      onChange={(e) => setGmailRecipient(e.target.value)}
+                      placeholder="Enter email address"
+                      className="w-full bg-black/80 border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#ec4899] font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-gray-400 uppercase block">Subject Line</label>
+                    <input
+                      type="text"
+                      value={gmailSubject}
+                      onChange={(e) => setGmailSubject(e.target.value)}
+                      placeholder="Subject"
+                      className="w-full bg-black/80 border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#ec4899] font-sans"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-black/60 border border-white/5 p-3 rounded-lg">
+                    <div className="text-[8px] uppercase font-mono text-purple-400 font-bold tracking-widest mb-1">
+                      EMAIL PREVIEW BODY
+                    </div>
+                    <p className="text-[11px] font-light text-gray-400 font-sans leading-relaxed">
+                      {gmailRecipient.trim().toLowerCase() === (gmailAddress || googleUser?.email || '').trim().toLowerCase() 
+                        ? `Hello ${name}, here is your PlayFest 2026 entry pass! ID: ${idBadge} with Access Category: ${priority}. Gaborone, Botswana is calling!`
+                        : `Hello! I just registered for PlayFest 2026 Gaborone and entered the VIP Giveaway. I want you to join my team! Use this link to RSVP for free: ${window.location.origin}`}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleSendGmail}
+                    disabled={isGmailSending || !gmailRecipient.trim()}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#ec4899] hover:bg-pink-500 text-white font-black text-xs uppercase tracking-widest font-display transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isGmailSending ? 'DISPATCHING...' : 'DISPATCH EMAIL NOW'}
+                  </button>
+                </div>
               </div>
             )}
           </div>

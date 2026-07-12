@@ -312,6 +312,26 @@ async function saveToGoogleSheets(newReg: AttendeeRegistration) {
   }
 }
 
+// Helper to send a confirmation email via backend
+async function sendConfirmationEmail(type: 'attendee' | 'vendor' | 'subscriber', data: any) {
+  try {
+    const response = await fetch('/api/send-confirmation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type, data }),
+    });
+    if (!response.ok) {
+      console.warn('[Email Confirmation] Server returned status:', response.status);
+    } else {
+      console.log('[Email Confirmation] Successfully triggered confirmation email for', type);
+    }
+  } catch (error: any) {
+    console.warn('[Email Confirmation] Failed to connect to server email endpoint:', error.message || error);
+  }
+}
+
 // 5. Exposed Unified Database API
 export const storage = {
   isRealFirebase(): boolean {
@@ -389,6 +409,9 @@ export const storage = {
       }
     }
 
+    // Trigger asynchronous email confirmation
+    sendConfirmationEmail('attendee', newReg);
+
     return newReg;
   },
 
@@ -439,6 +462,9 @@ export const storage = {
         console.error('Firestore Error saving vendor, fallback to local retention:', error);
       }
     }
+
+    // Trigger asynchronous email confirmation
+    sendConfirmationEmail('vendor', newVendor);
 
     return newVendor;
   },
@@ -491,6 +517,9 @@ export const storage = {
         console.error('Firestore Error saving subscription, fallback to local retention:', error);
       }
     }
+
+    // Trigger asynchronous email confirmation
+    sendConfirmationEmail('subscriber', newSub);
 
     return newSub;
   },

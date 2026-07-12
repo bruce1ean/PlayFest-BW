@@ -23,8 +23,7 @@ import {
 } from 'lucide-react';
 import { storage } from '../lib/storage';
 import { sounds } from '../lib/sounds';
-// @ts-ignore
-import gtaBg from '../assets/images/playfest_gta_bg_1782682995691.jpg';
+
 
 interface HeroSectionProps {
   onRegisterClick: () => void;
@@ -196,17 +195,12 @@ export default function HeroSection({
   return (
     <section className="relative min-h-screen flex flex-col justify-between pt-24 pb-6 px-4 sm:px-12 overflow-hidden bg-[#030107]">
       
-      {/* 1. LAYER 1: Full-screen blurred ambient sunset glow (ensures smooth rich filling of the screen) */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 blur-2xl scale-110 pointer-events-none"
-        style={{ backgroundImage: `url(${gtaBg})` }}
-      />
-      
-      {/* 2. LAYER 2: Sharp, perfectly contained, zoomed-out backdrop to avoid ANY layout clipping */}
-      <div 
-        className="absolute inset-0 bg-contain bg-center bg-no-repeat transition-transform duration-[12000ms] scale-95 sm:scale-100 ease-out animate-pulse-subtle pointer-events-none"
-        style={{ backgroundImage: `url(${gtaBg})` }}
-      />
+      {/* 1. Full-screen ambient cyber gradient glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#ec4899]/15 blur-[120px] animate-pulse-subtle" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/15 blur-[120px] animate-pulse-subtle" />
+        <div className="absolute top-[30%] left-[25%] w-[45%] h-[45%] rounded-full bg-purple-600/10 blur-[140px] animate-pulse-subtle" />
+      </div>
       
       {/* Gradients to blend text & layout seamlessly with perfect legibility */}
       <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-[#030107]/50 z-10" />
@@ -274,65 +268,72 @@ export default function HeroSection({
       <div className="relative z-20 grid grid-cols-1 lg:grid-cols-12 gap-8 my-auto pt-6 items-start">
         
         {/* Left Column: Menu Items list (GTA V start menu style) */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="space-y-1">
-            <span className="text-xs uppercase font-extrabold tracking-[0.25em] text-[#ec4899] font-mono flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> STAGE STARTING MENU
-            </span>
-            <h1 className="text-4xl sm:text-5xl font-black font-display tracking-tight text-white uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-              PLAYFEST<span className="text-cyan-400 font-normal">2026</span>
-            </h1>
-          </div>
+        <div className="lg:col-span-5 relative overflow-hidden rounded-2xl border border-white/10 p-6 bg-black/60 backdrop-blur-md shadow-2xl group transition-all duration-300 hover:border-pink-500/30 hover:shadow-[0_0_35px_rgba(236,72,153,0.25)]">
+          
+          {/* Subtle Pink/Cyan glowing overlays */}
+          <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 via-transparent to-cyan-500/10 opacity-40 group-hover:opacity-80 transition-opacity duration-300 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80 z-0 pointer-events-none" />
 
-          {/* Interactive Menu Options */}
-          <div 
-            className="space-y-2 border-l-2 border-white/5 pl-2 select-none"
-            onWheel={(e) => {
-              if (e.deltaY > 0) {
-                setFocusedIndex((prev) => (prev + 1) % menuItems.length);
-              } else if (e.deltaY < 0) {
-                setFocusedIndex((prev) => (prev - 1 + menuItems.length) % menuItems.length);
-              }
-            }}
-          >
-            {menuItems.map((item, index) => {
-              const isFocused = focusedIndex === index;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    sounds.playSelect();
-                    item.action();
-                  }}
-                  onMouseEnter={() => setFocusedIndex(index)}
-                  className={`w-full text-left py-3.5 px-4 rounded-lg font-display text-sm font-black tracking-widest uppercase transition-all duration-150 flex items-center justify-between border cursor-pointer ${
-                    isFocused
-                      ? 'bg-white text-black border-white translate-x-3 shadow-[0_0_20px_rgba(255,255,255,0.4)] font-extrabold'
-                      : 'bg-black/50 hover:bg-black/75 text-gray-300 border-white/5 hover:text-white'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    {isFocused && <ChevronRight className="w-4 h-4 text-[#ec4899] animate-pulse" />}
-                    {item.label}
-                  </span>
-                  {isFocused && (
-                    <span className="text-[10px] font-mono font-bold bg-[#ec4899]/10 text-[#ec4899] px-2 py-0.5 rounded border border-[#ec4899]/20 animate-pulse">
-                      SELECT
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Contextual Description Help Box */}
-          <div className="bg-black/85 border-t-2 border-[#ec4899] p-4 font-mono text-[11px] text-gray-300 leading-relaxed rounded-b-lg shadow-2xl relative">
-            <div className="absolute top-0 right-4 -translate-y-1/2 bg-[#ec4899] text-white text-[9px] font-bold px-2 py-0.5 rounded tracking-widest uppercase">
-              HELP COMPASS
+          <div className="relative z-10 space-y-6">
+            <div className="space-y-1">
+              <span className="text-xs uppercase font-extrabold tracking-[0.25em] text-[#ec4899] font-mono flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" /> STAGE STARTING MENU
+              </span>
+              <h1 className="text-4xl sm:text-5xl font-black font-display tracking-tight text-white uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                PLAYFEST<span className="text-cyan-400 font-normal">2026</span>
+              </h1>
             </div>
-            <p className="text-gray-400">
-              {menuItems[focusedIndex].description}
-            </p>
+
+            {/* Interactive Menu Options */}
+            <div 
+              className="space-y-2 border-l-2 border-white/5 pl-2 select-none"
+              onWheel={(e) => {
+                if (e.deltaY > 0) {
+                  setFocusedIndex((prev) => (prev + 1) % menuItems.length);
+                } else if (e.deltaY < 0) {
+                  setFocusedIndex((prev) => (prev - 1 + menuItems.length) % menuItems.length);
+                }
+              }}
+            >
+              {menuItems.map((item, index) => {
+                const isFocused = focusedIndex === index;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      sounds.playSelect();
+                      item.action();
+                    }}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                    className={`w-full text-left py-3.5 px-4 rounded-lg font-display text-sm font-black tracking-widest uppercase transition-all duration-150 flex items-center justify-between border cursor-pointer ${
+                      isFocused
+                        ? 'bg-white text-black border-white translate-x-3 shadow-[0_0_20px_rgba(255,255,255,0.4)] font-extrabold relative z-10'
+                        : 'bg-black/40 hover:bg-black/60 text-gray-300 border-white/5 hover:text-white relative z-10'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {isFocused && <ChevronRight className="w-4 h-4 text-[#ec4899] animate-pulse" />}
+                      {item.label}
+                    </span>
+                    {isFocused && (
+                      <span className="text-[10px] font-mono font-bold bg-[#ec4899]/10 text-[#ec4899] px-2 py-0.5 rounded border border-[#ec4899]/20 animate-pulse">
+                        SELECT
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Contextual Description Help Box */}
+            <div className="bg-black/85 border-t-2 border-[#ec4899] p-4 font-mono text-[11px] text-gray-300 leading-relaxed rounded-b-lg shadow-2xl relative">
+              <div className="absolute top-0 right-4 -translate-y-1/2 bg-[#ec4899] text-white text-[9px] font-bold px-2 py-0.5 rounded tracking-widest uppercase">
+                HELP COMPASS
+              </div>
+              <p className="text-gray-400">
+                {menuItems[focusedIndex].description}
+              </p>
+            </div>
           </div>
         </div>
 

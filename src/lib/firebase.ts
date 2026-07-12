@@ -12,19 +12,7 @@ import {
   getFirestore,
   type Firestore,
 } from 'firebase/firestore';
-
-// ---------------------------------------------------------------------------
-// Firebase configuration — sourced from firebase-applet-config.json
-// ---------------------------------------------------------------------------
-const firebaseConfig = {
-  apiKey: "AIzaSyC2igVMfeDfVQOczi4kxsNIgmQV0j9cm_M",
-  authDomain: "playfestbw-2301a.firebaseapp.com",
-  projectId: "playfestbw-2301a",
-  storageBucket: "playfestbw-2301a.firebasestorage.app",
-  messagingSenderId: "525377597069",
-  appId: "1:525377597069:web:a2053a1d1d0e9117f17cc4",
-  measurementId: "G-WCJ0QWY6NG"
-};
+import firebaseConfig from '../../firebase-applet-config.json';
 
 // ---------------------------------------------------------------------------
 // Initialise Firebase (guard against hot-reload double-init in Vite dev mode)

@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
+import nodemailer from 'nodemailer';
 
 const app = express();
 const PORT = 3000;
@@ -223,7 +224,349 @@ app.post('/api/backup-registration', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// SMTP Transporter and Email Notification Service
+// ---------------------------------------------------------------------------
+let mailTransporter: any = null;
+
+function getMailTransporter() {
+  if (mailTransporter !== null) return mailTransporter;
+
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!user || !pass) {
+    console.warn('[Email Notification] SMTP_USER or SMTP_PASS not set. Operating in Simulation Mode (emails will be logged to server console).');
+    mailTransporter = 'SIMULATION';
+    return 'SIMULATION';
+  }
+
+  try {
+    mailTransporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: {
+        user,
+        pass,
+      },
+    });
+    console.log('[Email Notification] SMTP Transporter successfully initialized for:', user);
+  } catch (err: any) {
+    console.error('[Email Notification] Failed to initialize SMTP Transporter:', err.message || err);
+    mailTransporter = 'SIMULATION';
+  }
+
+  return mailTransporter;
+}
+
+// POST Send Confirmation Email
+app.post('/api/send-confirmation', async (req, res) => {
+  const { type, data } = req.body;
+
+  if (!type || !data || !data.email) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing type, data, or target email address.',
+    });
+  }
+
+  const targetEmail = data.email.trim();
+  const fromHeader = process.env.SMTP_FROM || 'PlayFest Botswana <noreply@playfest2026.bw>';
+  const transporterInstance = getMailTransporter();
+
+  let subject = '';
+  let htmlContent = '';
+
+  if (type === 'attendee') {
+    // Determine the backup ticket type based on registration properties
+    let ticketType = 'General Entry & Prize Draw';
+    if (data.vipInterest === 'Yes' || data.vipInterest === 'Maybe') {
+      ticketType = 'VIP Giveaway Entry & Priority Waitlist';
+    } else if (data.earlyTicketAccess === 'Yes') {
+      ticketType = 'Early Notification & Giveaway Entry';
+    }
+
+    const interests = data.interests || ['General Interest'];
+    const formattedInterests = interests.map((i: string) => {
+      if (i === 'car_meet') return 'Custom Car Meet & Show';
+      if (i === 'gaming') return 'Gaming Arena & Esports';
+      if (i === 'live_music') return 'Electronic Soundwaves';
+      if (i === 'merch_shop') return 'Pop-Culture Merch & Apparel';
+      return i;
+    });
+
+    subject = '🎟️ PlayFest 2026 Confirmation: You\'re on the priority list!';
+    htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0c071e; color: #e2e8f0; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background-color: #120c2d; border-radius: 12px; overflow: hidden; border: 1px solid rgba(236,72,153,0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .header { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%); padding: 30px 20px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 26px; letter-spacing: 2px; text-transform: uppercase; }
+    .content { padding: 30px 25px; line-height: 1.6; }
+    .ticket-card { background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .ticket-card h2 { margin-top: 0; color: #ec4899; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+    .ticket-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; }
+    .ticket-label { color: #94a3b8; font-size: 12px; text-transform: uppercase; font-weight: bold; }
+    .ticket-value { color: #f8fafc; font-size: 14px; font-weight: bold; text-align: right; }
+    .tag { display: inline-block; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.3); color: #c084fc; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; margin-left: 5px; }
+    .footer { background-color: #060214; padding: 20px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); }
+    .footer a { color: #ec4899; text-decoration: none; }
+    .cta-btn { display: inline-block; background: #ec4899; color: #ffffff; text-decoration: none; padding: 12px 24px; font-weight: bold; border-radius: 6px; text-transform: uppercase; font-size: 13px; letter-spacing: 1px; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>PlayFest 2026</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.8); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Priority Queue Confirmed</p>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${data.fullName}</strong>,</p>
+      <p>Your registration for <strong>PlayFest 2026 Gaborone</strong> has been successfully received and added to our priority invite list!</p>
+      
+      <p>PlayFest is Botswana's premier gaming, automotive tuning, electronic soundwaves, and lifestyle collision event. We're extremely excited to have you join us for this landmark staging.</p>
+      
+      <div class="ticket-card">
+        <h2>RSVP PASS DETAILS</h2>
+        <div class="ticket-row">
+          <div class="ticket-label">Registration ID</div>
+          <div class="ticket-value" style="font-family: monospace; color: #06b6d4;">${data.id}</div>
+        </div>
+        <div class="ticket-row">
+          <div class="ticket-label">Access Category</div>
+          <div class="ticket-value">${ticketType}</div>
+        </div>
+        <div class="ticket-row">
+          <div class="ticket-label">Phone Number</div>
+          <div class="ticket-value">${data.phoneNumber}</div>
+        </div>
+        <div class="ticket-row">
+          <div class="ticket-label">Age Group</div>
+          <div class="ticket-value">${data.ageGroup}</div>
+        </div>
+        <div class="ticket-row">
+          <div class="ticket-label">Interests</div>
+          <div class="ticket-value">
+            ${formattedInterests.map((interest: string) => `<span class="tag">${interest}</span>`).join('')}
+          </div>
+        </div>
+        ${data.carDetails ? `
+        <div class="ticket-row" style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
+          <div class="ticket-label">Vehicle Entry</div>
+          <div class="ticket-value" style="color: #06b6d4;">${data.carDetails.year} ${data.carDetails.vehicleMake} ${data.carDetails.vehicleModel} (${data.carDetails.buildType})</div>
+        </div>
+        ` : ''}
+        ${data.gamingDetails ? `
+        <div class="ticket-row" style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
+          <div class="ticket-label">Gaming Profile</div>
+          <div class="ticket-value" style="color: #c084fc;">Platform: ${data.gamingDetails.platform} | Favs: ${data.gamingDetails.favoriteGames}</div>
+        </div>
+        ` : ''}
+      </div>
+
+      <p style="margin-top: 25px;"><strong>What happens next?</strong></p>
+      <ul>
+        <li>Keep an eye on this inbox. We will email you with your early ticket booking access code and official ticket pricing releases.</li>
+        <li>Follow us on Instagram <a href="https://www.instagram.com/playfestbw" style="color: #ec4899; text-decoration: none;">@playfestbw</a> to stay updated in real-time.</li>
+        <li>Get your team ready. Gaming tournament registrations and vehicle display slots will open shortly!</li>
+      </ul>
+
+      <center style="margin-top: 25px;">
+        <a href="https://www.instagram.com/playfestbw" class="cta-btn">Follow our Instagram Feed</a>
+      </center>
+    </div>
+    <div class="footer">
+      <p>© 2026 PlayFest Botswana. Gaborone, Botswana.</p>
+      <p>Need support? Contact us at <a href="mailto:info@playfest2026.bw">info@playfest2026.bw</a></p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+  } else if (type === 'vendor') {
+    subject = '🎪 PlayFest 2026: Vendor Application Received!';
+    htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0c071e; color: #e2e8f0; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background-color: #120c2d; border-radius: 12px; overflow: hidden; border: 1px solid rgba(6,182,212,0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .header { background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%); padding: 30px 20px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 26px; letter-spacing: 2px; text-transform: uppercase; }
+    .content { padding: 30px 25px; line-height: 1.6; }
+    .application-card { background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .application-card h2 { margin-top: 0; color: #06b6d4; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+    .app-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; }
+    .app-label { color: #94a3b8; font-size: 12px; text-transform: uppercase; font-weight: bold; }
+    .app-value { color: #f8fafc; font-size: 14px; font-weight: bold; text-align: right; }
+    .footer { background-color: #060214; padding: 20px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); }
+    .footer a { color: #06b6d4; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>PlayFest 2026</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.8); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Vendor Curation Application</p>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${data.contactPerson}</strong>,</p>
+      <p>Thank you for submitting your vendor interest application for <strong>PlayFest 2026 Gaborone</strong>. We have received your details, and our curation committee is reviewing them!</p>
+      
+      <p>PlayFest attracts thousands of passionate automotive, gaming, and pop-culture enthusiasts. We curate our vendor stalls meticulously to ensure a high-impact, high-converting experience for your business and a thrilling experience for attendees.</p>
+      
+      <div class="application-card">
+        <h2>APPLICATION DETAILS</h2>
+        <div class="app-row">
+          <div class="app-label">Application ID</div>
+          <div class="app-value" style="font-family: monospace; color: #06b6d4;">${data.id}</div>
+        </div>
+        <div class="app-row">
+          <div class="app-label">Business Name</div>
+          <div class="app-value" style="color: #ec4899;">${data.businessName}</div>
+        </div>
+        <div class="app-row">
+          <div class="app-label">Stall Category</div>
+          <div class="app-value">${data.category}</div>
+        </div>
+        <div class="app-row">
+          <div class="app-label">Stall Size</div>
+          <div class="app-value">${data.stallSize}</div>
+        </div>
+        <div class="app-row">
+          <div class="app-label">Power Required</div>
+          <div class="app-value">${data.electricityRequired}</div>
+        </div>
+        <div class="app-row">
+          <div class="app-label">Contact Number</div>
+          <div class="app-value">${data.contactNumber}</div>
+        </div>
+      </div>
+
+      <p><strong>What are the next steps?</strong></p>
+      <ul>
+        <li>Our vendor coordination team reviews all applications. We will contact you at <strong>${targetEmail}</strong> or <strong>${data.contactNumber}</strong> within 3-5 business days to confirm curation approval.</li>
+        <li>Once approved, you will receive information regarding stall pricing, deposit requirements, setup schedules, and electrical allocation guidelines.</li>
+      </ul>
+
+      <p style="font-style: italic; color: #94a3b8; font-size: 13px; margin-top: 20px;">Please do not send any payments until you receive our official invoice with approval from an @playfest2026.bw email address.</p>
+    </div>
+    <div class="footer">
+      <p>© 2026 PlayFest Botswana. Gaborone, Botswana.</p>
+      <p>Need support? Contact us at <a href="mailto:info@playfest2026.bw">info@playfest2026.bw</a></p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+  } else if (type === 'subscriber') {
+    subject = '✨ Welcome to the PlayFest 2026 Priority Feed!';
+    htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0c071e; color: #e2e8f0; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background-color: #120c2d; border-radius: 12px; overflow: hidden; border: 1px solid rgba(139,92,246,0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .header { background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); padding: 30px 20px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 26px; letter-spacing: 2px; text-transform: uppercase; }
+    .content { padding: 30px 25px; line-height: 1.6; }
+    .feature-badge { display: inline-block; background: rgba(236,72,153,0.15); border: 1px solid rgba(236,72,153,0.3); color: #f472b6; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; }
+    .footer { background-color: #060214; padding: 20px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); }
+    .footer a { color: #8b5cf6; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>PlayFest 2026</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.8); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Priority Feed Access</p>
+    </div>
+    <div class="content">
+      <center><span class="feature-badge">Active Subscription Confirmed</span></center>
+      <p>Hello,</p>
+      <p>You have successfully joined the <strong>PlayFest 2026 Botswana Priority Feed</strong>!</p>
+      
+      <p>By subscribing to our priority queue, you will receive exclusive, first-in-line alerts for:</p>
+      <ul>
+        <li>⚡ Official Ticket Release & Presale codes (save up to 40%)</li>
+        <li>🚗 Elite Custom Car Display and Dyno category slot application openings</li>
+        <li>🎮 Esports arena registration & tournament brackets</li>
+        <li>🎵 Special Headliner announcements and electronic soundwave schedule releases</li>
+      </ul>
+
+      <p>We are dedicated to building a premium, high-octane celebration of gaming, custom cars, and underground pop-culture. Expect 100% hype and 0% spam.</p>
+
+      <p style="margin-top: 25px;">See you on the inside!</p>
+    </div>
+    <div class="footer">
+      <p>© 2026 PlayFest Botswana. Gaborone, Botswana.</p>
+      <p>Need support or wish to unsubscribe? Contact us at <a href="mailto:info@playfest2026.bw">info@playfest2026.bw</a></p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+  } else {
+    return res.status(400).json({
+      success: false,
+      error: 'Unsupported registration type.',
+    });
+  }
+
+  // Handle send operation
+  if (transporterInstance === 'SIMULATION') {
+    console.log('\n=============================================================');
+    console.log('📬  [EMAIL SIMULATION] Confirmation email generated successfully!');
+    console.log(`TYPE:     ${type.toUpperCase()}`);
+    console.log(`TO:       ${targetEmail}`);
+    console.log(`FROM:     ${fromHeader}`);
+    console.log(`SUBJECT:  ${subject}`);
+    console.log('-------------------------------------------------------------');
+    console.log('HTML CONTENT PREVIEW (First 250 chars):');
+    console.log(htmlContent.replace(/<[^>]*>/g, '').trim().substring(0, 250) + '...');
+    console.log('=============================================================\n');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email confirmation simulation succeeded.',
+      simulated: true,
+    });
+  }
+
+  try {
+    await transporterInstance.sendMail({
+      from: fromHeader,
+      to: targetEmail,
+      subject: subject,
+      html: htmlContent,
+    });
+
+    console.log(`[Email System] Successfully sent ${type} confirmation email to:`, targetEmail);
+    return res.status(200).json({
+      success: true,
+      message: 'Email confirmation successfully sent via SMTP.',
+    });
+  } catch (error: any) {
+    console.error(`[Email System] Failed to send email to ${targetEmail} via SMTP:`, error.message || error);
+    // Return 200 with simulated: false and error in warning so the frontend flow remains unbroken!
+    return res.status(200).json({
+      success: true,
+      message: 'SMTP delivery failed, registration complete.',
+      warning: 'Could not deliver email: ' + (error.message || error),
+    });
+  }
+});
+
 // POST Reset Registrations from Google Sheets
+
 app.post('/api/reset-registrations', async (req, res) => {
   console.log('[Sheets Database] Received request to reset all registrations.');
 

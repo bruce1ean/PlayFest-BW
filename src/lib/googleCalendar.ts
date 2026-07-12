@@ -52,8 +52,10 @@ if (!isPlaceholder) {
 }
 
 const provider = new GoogleAuthProvider();
-// Request Calendar scopes
+// Request Calendar and Gmail scopes
 provider.addScope('https://www.googleapis.com/auth/calendar.events');
+provider.addScope('https://www.googleapis.com/auth/gmail.send');
+provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -152,6 +154,67 @@ export const addPlayFestEventToCalendar = async (accessToken: string, ticketDeta
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(`Google Calendar request failed: ${errText || response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Retrieve authenticating user's Gmail profile details
+export const getGmailProfile = async (accessToken: string) => {
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to retrieve Gmail profile: ${errText || response.statusText}`);
+  }
+  return await response.json();
+};
+
+// Send an HTML format email using user's real Gmail account
+export const sendPlayFestEmailWithGmail = async (
+  accessToken: string,
+  recipientEmail: string,
+  subject: string,
+  htmlMessage: string
+) => {
+  const toBase64Url = (str: string) => {
+    const utf8Bytes = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    return window.btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  };
+
+  const emailContent = [
+    `To: ${recipientEmail}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    htmlMessage
+  ].join('\r\n');
+
+  const raw = toBase64Url(emailContent);
+
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ raw })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gmail send failed: ${errText || response.statusText}`);
   }
 
   return await response.json();

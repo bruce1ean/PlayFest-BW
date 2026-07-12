@@ -1,10 +1,11 @@
 {
-  "projectId": "playfestbw-2301a",
-  "appId": "1:525377597069:web:a2053a1d1d0e9117f17cc4",
-  "apiKey": "AIzaSyC2igVMfeDfVQOczi4kxsNIgmQV0j9cm_M",
-  "authDomain": "playfestbw-2301a.firebaseapp.com",
-  "storageBucket": "playfestbw-2301a.firebasestorage.app",
-  "messagingSenderId": "525377597069",
-  "measurementId": "G-WCJ0QWY6NG",
-  "firestoreDatabaseId": "(default)"
+  "projectId": "halogen-gate-07854",
+  "appId": "1:1058952150992:web:3b5e27e5681a22625e83d5",
+  "apiKey": "AIzaSyDDIeoSgsqIYDLYr7kG643yWEEDJ5KLx_4",
+  "authDomain": "halogen-gate-07854.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-playfest2026audi-b8377a57-3fce-4ab6-bc76-405fa9a5e788",
+  "storageBucket": "halogen-gate-07854.firebasestorage.app",
+  "messagingSenderId": "1058952150992",
+  "measurementId": "",
+  "oAuthClientId": "1058952150992-7fuq8rnsg3snto7ju9s5mkq1nd023gbh.apps.googleusercontent.com"
 }
