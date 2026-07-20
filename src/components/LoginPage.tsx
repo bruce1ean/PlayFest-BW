@@ -39,75 +39,69 @@ export default function LoginPage({
 
   const handleAttendeeLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
+    if (!email.trim() || !password.trim()) {
       sounds.playCancel();
-      addToast('Please enter your email address.', 'error');
-      return;
-    }
-    if (!password) {
-      sounds.playCancel();
-      addToast('Please enter your account password.', 'error');
+      addToast('Please enter both email and password.', 'error');
       return;
     }
 
     setLoading(true);
-    storage.trackClick('btn-login-attendee-submit');
-    sounds.playSelect();
+    sounds.playHover();
 
     try {
-      // 1. Authenticate with Firebase first
       const credential = await loginUser(email.trim(), password);
-      console.log('Firebase user logged in successfully:', credential.user?.uid);
-      
-      // 2. Fetch their details from local/database registrations
       const regs = await storage.getRegistrations();
       const match = regs.find((r) => r.email.toLowerCase() === email.trim().toLowerCase());
-
+      
       if (match) {
         sounds.playSuccess();
         addToast('Welcome back! Your ticket has been retrieved successfully.', 'success');
         onSuccessAttendee(match);
       } else {
-        const vendors = await storage.getVendorApplications();
-        const vendorMatch = vendors.find((v) => v.email.toLowerCase() === email.trim().toLowerCase());
-
-        if (vendorMatch) {
-          sounds.playSuccess();
-          addToast('Welcome back! Your vendor application was retrieved successfully.', 'success');
-          onSuccessAttendee(vendorMatch);
-        } else {
-          // If they authenticated but have no details recorded yet, construct a basic player object
-          sounds.playSuccess();
-          addToast('Logged in successfully! Welcome to PlayFest.', 'success');
-          onSuccessAttendee({
-            id: credential.user.uid,
-            fullName: email.split('@')[0],
-            email: email.trim(),
-            phone: 'N/A',
-            city: 'N/A',
-            interests: ['General Interest'],
-          });
-        }
+        sounds.playSuccess();
+        addToast('Logged in successfully! Welcome to PlayFest.', 'success');
+        onSuccessAttendee({
+          id: credential.user.uid,
+          fullName: email.split('@')[0],
+          email: email.trim(),
+          phone: 'N/A',
+          city: 'N/A',
+          interests: ['General Interest'],
+        } as any);
       }
     } catch (authErr: any) {
-      sounds.playCancel();
       if (authErr.code === 'auth/operation-not-allowed') {
-        console.warn('Firebase Email/Password Authentication is not enabled in your Firebase project. Please enable it in the Firebase Console (Authentication > Sign-in method).');
-      } else {
-        console.error('Firebase Auth Login failed:', authErr);
+        try {
+          const isValidCred = await (storage as any).verifyFallbackCredential(email.trim(), password);
+          const regs = await storage.getRegistrations();
+          const match = regs.find((r) => r.email.toLowerCase() === email.trim().toLowerCase());
+          
+          if (match) {
+            const storedCreds = JSON.parse(localStorage.getItem('playfest_fallback_credentials') || '{}');
+            const hasCredential = !!storedCreds[email.trim().toLowerCase()];
+            if (hasCredential && !isValidCred) {
+              sounds.playCancel();
+              addToast('Incorrect password. Please try again.', 'error');
+              setLoading(false);
+              return;
+            }
+            sounds.playSuccess();
+            addToast('Welcome back! Verified & retrieved your ticket (Guest Fallback Mode).', 'success');
+            onSuccessAttendee(match);
+            setLoading(false);
+            return;
+          }
+        } catch (fallbackErr) {
+          console.error(fallbackErr);
+        }
       }
-      
+
+      console.error('Firebase Auth Login failed:', authErr);
       let friendlyMessage = 'Authentication failed. Please check your credentials.';
       if (authErr.code === 'auth/wrong-password') {
         friendlyMessage = 'Incorrect password. Please try again.';
       } else if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
-        friendlyMessage = 'No account found with this email, or invalid credentials. Please check your spelling or register.';
-      } else if (authErr.code === 'auth/invalid-email') {
-        friendlyMessage = 'Invalid email address format.';
-      } else if (authErr.code === 'auth/operation-not-allowed') {
-        friendlyMessage = 'Firebase Email/Password sign-in is disabled. Please enable it under Authentication > Sign-in method in your Firebase Console.';
-      } else if (authErr.message) {
-        friendlyMessage = authErr.message;
+        friendlyMessage = 'No account found with this email. Please register.';
       }
       addToast(friendlyMessage, 'error');
     } finally {
@@ -141,11 +135,11 @@ export default function LoginPage({
   };
 
   const fieldHelpMap: Record<string, string> = {
-    email: 'ENTER SECURE COMMUNICATIVE MAILBOX: Input the email address you originally provided during custom RSVP registration or stall application to retrieve your digital entry passes.',
+    email: 'ENTER SECURE COMMUNICATIVE MAILBOX: Input the email address you originally provided during custom RSVP registration to retrieve your digital entry passes.',
     password: 'ENTER SECURITY PASSWORD: Input the password associated with your player account to authenticate with Firebase database modules.',
     passcode: 'ORC KEYS: Authorized staff must submit their encrypted municipal command console codes to decrypt registrations & spreadsheet pipelines.',
     rsvp_tab: 'SWITCH TO ENTHUSIAST PASS RETRIEVAL: Search for existing free player passes, tuner garage details, or registered gaming titles.',
-    org_tab: 'SWITCH TO STAFF GATEWAY: Access terminal dashboards for attendee check-ins, vendor logistics, and system telemetry stats.'
+    org_tab: 'SWITCH TO STAFF GATEWAY: Access terminal dashboards for attendee check-ins, demographic reports, and system telemetry stats.'
   };
 
   return (

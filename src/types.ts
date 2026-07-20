@@ -10,7 +10,7 @@ export interface AttendeeRegistration {
   email: string;
   phoneNumber: string;
   country?: string;
-  ageGroup: 'Under 18' | '18-24' | '25-34' | '35-44' | '45+';
+  ageGroup: string;
   gender?: 'Male' | 'Female' | 'Non-binary' | 'Prefer not to say';
   city: string;
   attendanceLikelihood: 'Definitely' | 'Probably' | 'Maybe';
@@ -44,21 +44,6 @@ export interface AttendeeRegistration {
   };
 }
 
-export interface VendorApplication {
-  id: string;
-  createdAt: string;
-  businessName: string;
-  contactPerson: string;
-  contactNumber: string;
-  email: string;
-  country?: string;
-  category: 'Food & Drinks' | 'Gaming Merch / Accessories' | 'Apparel/Lifestyle' | 'Automotive' | 'Tech/Exhibition' | 'Art & Crafts' | 'Other';
-  productsOrServices: string;
-  socialMediaLinks: string;
-  stallSize: 'Small (3m x 3m)' | 'Medium (6m x 3m)' | 'Large Custom Space';
-  electricityRequired: 'Yes' | 'No';
-  additionalRequests: string;
-}
 
 export interface NewsletterSubscriber {
   id: string;

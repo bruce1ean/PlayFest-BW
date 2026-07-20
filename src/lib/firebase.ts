@@ -10,6 +10,8 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -19,7 +21,17 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // ---------------------------------------------------------------------------
 const app: FirebaseApp  = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth: Auth        = getAuth(app);
-const db: Firestore     = getFirestore(app);
+
+let db: Firestore;
+try {
+  db = initializeFirestore(app, {
+    localCache: memoryLocalCache(),
+    experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: true
+  }, (firebaseConfig as any).firestoreDatabaseId);
+} catch (e) {
+  db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+}
 
 export { app, auth, db };
 

@@ -28,10 +28,6 @@ export default function TestimonialsFAQ() {
       a: 'Organizers plan to release early-bird batches once venue capacity counts and sponsor-funded prize targets are fully locked in. All registrants will receive an instant email and SMS notice.'
     },
     {
-      q: 'Can businesses register now?',
-      a: 'Yes! Local brands, developers, food trucks, and craft producers can submit a vendor proposal directly through the "Brand & Vendor" tab in our Registration Hub to save stall space.'
-    },
-    {
       q: 'Can I display my car?',
       a: 'Absolutely! If you select "Car Showcase & Meet" under interests on the registration page, you can enter your vehicle technical statistics and optional photo. Our staging committees review and invite builds.'
     },

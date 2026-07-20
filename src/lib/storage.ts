@@ -6,6 +6,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
+  getFirestore,
   initializeFirestore,
   memoryLocalCache, 
   collection, 
@@ -20,7 +21,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { AttendeeRegistration, VendorApplication, NewsletterSubscriber, AppAnalytics, ConceptComment } from '../types';
+import { AttendeeRegistration, NewsletterSubscriber, AppAnalytics, ConceptComment } from '../types';
 import { generateSeedData } from '../mockData';
 
 // Resolve Firebase Config from environment variables or local JSON config
@@ -57,9 +58,15 @@ let useFirebase = false;
 if (!isPlaceholder) {
   try {
     app = getApps().length === 0 ? initializeApp(resolvedConfig) : getApp();
-    db = initializeFirestore(app, {
-      localCache: memoryLocalCache()
-    }, resolvedConfig.firestoreDatabaseId);
+    try {
+      db = initializeFirestore(app, {
+        localCache: memoryLocalCache(),
+        experimentalForceLongPolling: true,
+        experimentalAutoDetectLongPolling: true
+      }, resolvedConfig.firestoreDatabaseId);
+    } catch (initErr: any) {
+      db = getFirestore(app, resolvedConfig.firestoreDatabaseId);
+    }
     auth = getAuth(app);
     useFirebase = true;
     console.log('Firebase initialized. Using real cloud database.');
@@ -191,20 +198,7 @@ async function syncLocalToFirebase() {
       }
     }
 
-    // 2. Sync vendors
-    const localVendors = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
-    if (localVendors.length > 0) {
-      const qSnap = await getDocs(collection(db, 'vendors'));
-      const firebaseIds = new Set(qSnap.docs.map(docSnap => docSnap.id));
-      for (const v of localVendors) {
-        if (!firebaseIds.has(v.id)) {
-          await setDoc(doc(db, 'vendors', v.id), v);
-          console.log('Synced vendor application to Firestore:', v.id);
-        }
-      }
-    }
-
-    // 3. Sync subscribers
+    // 2. Sync subscribers
     const localSubs = getLocalData<NewsletterSubscriber[]>(STORAGE_SUBSCRIBERS_KEY, []);
     if (localSubs.length > 0) {
       const qSnap = await getDocs(collection(db, 'subscribers'));
@@ -217,7 +211,7 @@ async function syncLocalToFirebase() {
       }
     }
 
-    // 4. Sync comments
+    // 3. Sync comments
     const localComments = getLocalData<ConceptComment[]>(STORAGE_COMMENTS_KEY, []);
     if (localComments.length > 0) {
       const qSnap = await getDocs(collection(db, 'comments'));
@@ -295,7 +289,6 @@ async function saveToGoogleSheets(newReg: AttendeeRegistration) {
         const parsed = JSON.parse(errText);
         errorMessage = parsed.error || parsed.message || errorMessage;
       } catch {
-        // If it's a Vercel 404 HTML or other non-JSON response, don't spam the raw HTML
         if (errText && !errText.trim().startsWith('<')) {
           errorMessage = errText;
         } else {
@@ -305,7 +298,6 @@ async function saveToGoogleSheets(newReg: AttendeeRegistration) {
       console.warn('[Storage/Google Sheets] Backup endpoint returned non-ok status:', errorMessage);
       return;
     }
-
     console.log('[Storage/Google Sheets] Registration successfully backed up to Google Sheets:', newReg.id);
   } catch (error: any) {
     console.warn('[Storage/Google Sheets] Failed to connect to Google Sheets backup endpoint:', error.message || error);
@@ -313,7 +305,7 @@ async function saveToGoogleSheets(newReg: AttendeeRegistration) {
 }
 
 // Helper to send a confirmation email via backend
-async function sendConfirmationEmail(type: 'attendee' | 'vendor' | 'subscriber', data: any) {
+async function sendConfirmationEmail(type: 'attendee' | 'subscriber', data: any) {
   try {
     const response = await fetch('/api/send-confirmation', {
       method: 'POST',
@@ -372,8 +364,25 @@ export const storage = {
     } catch (error) {
       console.log('Error fetching registrations from Google Sheets API, falling back to LocalStorage:', error);
     }
-    
-    // Sort newest first
+
+    if (useFirebase && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'registrations'));
+        const firebaseList: AttendeeRegistration[] = [];
+        querySnapshot.forEach((docSnap) => {
+          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
+        });
+        
+        const ids = new Set(blended.map(r => r.id));
+        firebaseList.forEach(item => {
+          if (!ids.has(item.id)) {
+            blended.push(item);
+          }
+        });
+      } catch (error) {
+        console.warn('Error fetching registrations from Firebase, falling back to LocalStorage:', error);
+      }
+    }
     return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
@@ -385,88 +394,33 @@ export const storage = {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Save to Google Sheets (as the primary backend database if configured)
-    try {
-      await saveToGoogleSheets(newReg);
-      console.log('Saved to Google Sheets successfully:', newReg.id);
-    } catch (error: any) {
-      console.warn('[Storage] Failed to save to Google Sheets (falling back to local storage & firestore):', error.message || error);
-    }
-
-    // 2. Save to LocalStorage to guarantee data preservation and offline speed
+    // SAVE Locally first
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
     local.push(newReg);
     saveLocalData(STORAGE_REGISTRATIONS_KEY, local);
 
-    // 3. Optional: mirror to Firestore if active (for easy future migration!)
+    // SAVE to Firebase if enabled
     if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'registrations', newReg.id), newReg);
-        console.log('Firebase registration mirrored successfully to registrations collection:', newReg.id);
-      } catch (error) {
-        console.warn('Firestore mirroring failed, but Google Sheets was successful:', error);
-        // Do not throw the error here, as Firestore mirroring is optional and Google Sheets + LocalStorage are already secure.
-      }
+      setDoc(doc(db, 'registrations', newReg.id), newReg)
+        .then(() => {
+          console.log('Firebase registration saved successfully:', newReg.id);
+        })
+        .catch((error) => {
+          console.error('Firestore Error saving registration:', error);
+        });
     }
 
-    // Trigger asynchronous email confirmation
-    sendConfirmationEmail('attendee', newReg);
+    // Backup to Google Sheets asynchronously
+    saveToGoogleSheets(newReg).catch(err => {
+      console.warn('Google Sheets backup error:', err);
+    });
+
+    // Send confirmation email asynchronously
+    sendConfirmationEmail('attendee', newReg).catch(err => {
+      console.warn('Confirmation email error:', err);
+    });
 
     return newReg;
-  },
-
-  // GET Vendors
-  async getVendorApplications(): Promise<VendorApplication[]> {
-    const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
-    let blended = [...local];
-
-    if (useFirebase && db) {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'vendors'));
-        const firebaseList: VendorApplication[] = [];
-        querySnapshot.forEach((docSnap) => {
-          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as VendorApplication);
-        });
-        
-        const ids = new Set(local.map(v => v.id));
-        firebaseList.forEach(item => {
-          if (!ids.has(item.id)) {
-            blended.push(item);
-          }
-        });
-      } catch (error) {
-        console.warn('Error fetching vendor applications from Firebase, falling back to LocalStorage:', error);
-      }
-    }
-    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  },
-
-  // SAVE Vendor Application
-  async saveVendorApplication(vendor: Omit<VendorApplication, 'id' | 'createdAt'>): Promise<VendorApplication> {
-    const newVendor: VendorApplication = {
-      ...vendor,
-      id: `vendor_${Math.random().toString(36).substring(2, 9)}`,
-      createdAt: new Date().toISOString()
-    };
-
-    // ALWAYS save locally first
-    const local = getLocalData<VendorApplication[]>(STORAGE_VENDORS_KEY, []);
-    local.push(newVendor);
-    saveLocalData(STORAGE_VENDORS_KEY, local);
-
-    if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'vendors', newVendor.id), newVendor);
-        console.log('Firebase vendor application saved successfully:', newVendor.id);
-      } catch (error) {
-        console.error('Firestore Error saving vendor, fallback to local retention:', error);
-      }
-    }
-
-    // Trigger asynchronous email confirmation
-    sendConfirmationEmail('vendor', newVendor);
-
-    return newVendor;
   },
 
   // GET Newsletter Subscribers
@@ -510,12 +464,14 @@ export const storage = {
     }
 
     if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'subscribers', newSub.id), newSub);
-        console.log('Firebase subscription saved successfully:', newSub.id);
-      } catch (error) {
-        console.error('Firestore Error saving subscription, fallback to local retention:', error);
-      }
+      // Fire-and-forget: do not await the Firestore write to prevent UI block when auth is disabled or offline
+      setDoc(doc(db, 'subscribers', newSub.id), newSub)
+        .then(() => {
+          console.log('Firebase subscription saved successfully:', newSub.id);
+        })
+        .catch((error) => {
+          console.error('Firestore Error saving subscription, fallback to local retention:', error);
+        });
     }
 
     // Trigger asynchronous email confirmation
@@ -652,15 +608,66 @@ export const storage = {
     saveLocalData(STORAGE_COMMENTS_KEY, local);
 
     if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'comments', newComment.id), newComment);
-        console.log('Firebase brand/concept comment saved successfully:', newComment.id);
-      } catch (error) {
-        console.error('Firestore Error saving comment, fallback to local retention:', error);
-      }
+      // Fire-and-forget: do not await the Firestore write to prevent UI block when auth is disabled or offline
+      setDoc(doc(db, 'comments', newComment.id), newComment)
+        .then(() => {
+          console.log('Firebase brand/concept comment saved successfully:', newComment.id);
+        })
+        .catch((error) => {
+          console.error('Firestore Error saving comment, fallback to local retention:', error);
+        });
     }
 
     return newComment;
+  },
+
+  // Fallback Credentials Helpers for when Firebase Auth is disabled in Starter tier sandbox
+  async saveFallbackCredential(email: string, password: string): Promise<void> {
+    const key = 'playfest_fallback_credentials';
+    const local = getLocalData<Record<string, string>>(key, {});
+    local[email.trim().toLowerCase()] = password;
+    saveLocalData(key, local);
+
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, 'credentials', email.trim().toLowerCase()), {
+          email: email.trim().toLowerCase(),
+          password: password,
+          createdAt: new Date().toISOString()
+        });
+        console.log('Fallback credential mirrored successfully to Firestore.');
+      } catch (e) {
+        console.warn('Could not mirror fallback credentials to Firestore:', e);
+      }
+    }
+  },
+
+  async verifyFallbackCredential(email: string, password: string): Promise<boolean> {
+    const key = 'playfest_fallback_credentials';
+    const local = getLocalData<Record<string, string>>(key, {});
+    const storedPassword = local[email.trim().toLowerCase()];
+    
+    if (storedPassword && storedPassword === password) {
+      return true;
+    }
+
+    // Double check in Firestore
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, 'credentials', email.trim().toLowerCase());
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().password === password) {
+          // Update local cache
+          local[email.trim().toLowerCase()] = password;
+          saveLocalData(key, local);
+          return true;
+        }
+      } catch (e) {
+        console.warn('Could not verify credentials against Firestore:', e);
+      }
+    }
+
+    return false;
   },
 
   // RESET All Registrations (LocalStorage + Google Sheets + Firestore)

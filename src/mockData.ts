@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AttendeeRegistration, VendorApplication, NewsletterSubscriber } from './types';
+import { AttendeeRegistration, NewsletterSubscriber } from './types';
 
 const BotswanaCities = [
   'Gaborone',
@@ -48,7 +48,7 @@ const GamerFavorites = [
 // Helper to generate seed registrations
 export function generateSeedData(): {
   registrations: AttendeeRegistration[];
-  vendors: VendorApplication[];
+  
   subscribers: NewsletterSubscriber[];
 } {
   const registrations: AttendeeRegistration[] = [];
@@ -60,8 +60,9 @@ export function generateSeedData(): {
   for (let i = 0; i < 168; i++) {
     const regDate = new Date(baseTime.getTime() + i * 2.1 * 60 * 60 * 1000 + Math.random() * 3000000);
     const id = `reg_${Math.random().toString(36).substring(2, 9)}`;
-    const ageOptions: AttendeeRegistration['ageGroup'][] = ['18-24', '18-24', '25-34', '25-34', '35-44', 'Under 18', '45+'];
-    const ageGroup = ageOptions[Math.floor(Math.random() * ageOptions.length)];
+    // Generate specific individual ages (between 16 and 48)
+    const randomAge = Math.floor(Math.random() * (48 - 16 + 1)) + 16;
+    const ageGroup = String(randomAge);
     
     const likelihoodOptions: AttendeeRegistration['attendanceLikelihood'][] = ['Definitely', 'Definitely', 'Probably', 'Maybe'];
     const attendanceLikelihood = likelihoodOptions[Math.floor(Math.random() * likelihoodOptions.length)];
@@ -195,80 +196,6 @@ export function generateSeedData(): {
     });
   }
 
-  // Generate 8 realistic vendor applications
-  const vendors: VendorApplication[] = [
-    {
-      id: 'vendor_1',
-      createdAt: new Date(baseTime.getTime() + 10 * 60 * 60 * 1000).toISOString(),
-      businessName: 'Choma Flame & Grills',
-      contactPerson: 'Thapelo Choma',
-      contactNumber: '+267 72109401',
-      email: 'info@chomaflame.co.bw',
-      category: 'Food & Drinks',
-      productsOrServices: 'Gourmet street-food burgers, loaded fries, and craft mocktails.',
-      socialMediaLinks: 'instagram.com/chomaflame',
-      stallSize: 'Medium (6m x 3m)',
-      electricityRequired: 'Yes',
-      additionalRequests: 'Require a spot close to a waste-disposal bin.'
-    },
-    {
-      id: 'vendor_2',
-      createdAt: new Date(baseTime.getTime() + 35 * 60 * 60 * 1000).toISOString(),
-      businessName: 'Pixel Hub Botswana',
-      contactPerson: 'Tumelo Gaborone',
-      contactNumber: '+267 76392019',
-      email: 'sales@pixelhub.co.bw',
-      category: 'Gaming Merch / Accessories',
-      productsOrServices: 'Custom custom-keycaps, RGB mousepads, and anime gaming-figures.',
-      socialMediaLinks: 'facebook.com/pixelhubbw',
-      stallSize: 'Small (3m x 3m)',
-      electricityRequired: 'Yes',
-      additionalRequests: 'Need stable electricity to power demo screens.'
-    },
-    {
-      id: 'vendor_3',
-      createdAt: new Date(baseTime.getTime() + 55 * 60 * 60 * 1000).toISOString(),
-      businessName: 'Stance Nation BW Apparel',
-      contactPerson: 'Kaboy Lets',
-      contactNumber: '+267 74900184',
-      email: 'kabelo@stancenationbw.com',
-      category: 'Apparel/Lifestyle',
-      productsOrServices: 'Custom premium vehicle-themed t-shirts, hoodies, and keychains.',
-      socialMediaLinks: 'instagram.com/stancenationbw',
-      stallSize: 'Small (3m x 3m)',
-      electricityRequired: 'No',
-      additionalRequests: 'Will set up apparel garment clothing racks.'
-    },
-    {
-      id: 'vendor_4',
-      createdAt: new Date(baseTime.getTime() + 90 * 60 * 60 * 1000).toISOString(),
-      businessName: 'Apex Simulat Racing BW',
-      contactPerson: 'Lame Mpho',
-      contactNumber: '+267 71329210',
-      email: 'apexsimulation@gmail.com',
-      category: 'Tech/Exhibition',
-      productsOrServices: 'Virtual reality racing simulators setups and tournament setups.',
-      socialMediaLinks: 'tiktok.com/@apexsimulationsbw',
-      stallSize: 'Large Custom Space',
-      electricityRequired: 'Yes',
-      additionalRequests: 'Requires continuous 2.5kW power supply to support top simulators.'
-    },
-    {
-      id: 'vendor_5',
-      createdAt: new Date(baseTime.getTime() + 120 * 60 * 60 * 1000).toISOString(),
-      businessName: 'Kalahari Biltong & Beverages',
-      contactPerson: 'Jack Strydom',
-      contactNumber: '+267 73001823',
-      email: 'kalaharibiltong@co.bw',
-      category: 'Food & Drinks',
-      productsOrServices: 'Authentic local Botswana beef biltong, dried fruits, chillies, and local craft ginger drinks.',
-      socialMediaLinks: 'facebook.com/kalahari_biltong_bw',
-      stallSize: 'Small (3m x 3m)',
-      electricityRequired: 'No',
-      additionalRequests: 'No power needed, just standard shaded stall space.'
-    }
-  ];
-
   // News subbers
   const subscribers: NewsletterSubscriber[] = Array.from({ length: 42 }, (_, index) => {
     return {
@@ -278,5 +205,5 @@ export function generateSeedData(): {
     };
   });
 
-  return { registrations, vendors, subscribers };
+  return { registrations, subscribers };
 }

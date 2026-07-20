@@ -30,7 +30,7 @@ export default function WhyRegister() {
     {
       icon: <Shield className="w-6 h-6 text-cyan-400" />,
       title: 'Optimize Space & Logistics',
-      description: 'Gives vital insights for securing adequate car showcase parks, vendor stalls, custom setups, and safe crowd operations.'
+      description: 'Gives vital insights for securing adequate car showcase parks, amenities, custom setups, and safe crowd operations.'
     },
     {
       icon: <HeartHandshake className="w-6 h-6 text-purple-400" />,

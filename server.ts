@@ -224,6 +224,200 @@ app.post('/api/backup-registration', async (req, res) => {
   }
 });
 
+// Google Sheets Vendors Backup API Endpoint
+app.post('/api/backup-vendor', async (req, res) => {
+  const payload = req.body;
+
+  // Logging incoming backup payload
+  console.log('[Sheets Database] Received save request for vendor:', payload?.id);
+
+  // Quick validation of the vendor payload
+  if (!payload || !payload.id || !payload.businessName || !payload.email) {
+    console.warn('[Sheets Database] Invalid payload received:', payload);
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required vendor registration fields.',
+    });
+  }
+
+  // Extract config
+  const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+  const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+  const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = cleanSpreadsheetId(rawSpreadsheetId);
+  const sheetName = process.env.GOOGLE_SHEET_VENDORS_NAME || 'Vendors';
+
+  // Format the contact number with a leading single quote (') if it starts with +, =, or - to prevent Google Sheets formula parse errors
+  let formattedContactNumber = payload.contactNumber || '';
+  if (formattedContactNumber.startsWith('+') || formattedContactNumber.startsWith('=') || formattedContactNumber.startsWith('-')) {
+    formattedContactNumber = `'` + formattedContactNumber;
+  }
+
+  // 1. Prioritize Google Sheets Apps Script Web App URL if configured
+  if (webAppUrl) {
+    try {
+      if (webAppUrl.includes('docs.google.com/spreadsheets')) {
+        throw new Error('You configured GOOGLE_SHEETS_WEBAPP_URL with a standard Google Sheet spreadsheet URL instead of a deployed Google Apps Script Web App /exec URL.');
+      }
+
+      console.log('[Sheets Database] WebApp URL configured. Saving vendor via Apps Script Web App...');
+      
+      const response = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...payload,
+          contactNumber: formattedContactNumber,
+          isVendor: true,
+          sheetName
+        }),
+      });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`Google Sheets WebApp returned status ${response.status}: ${responseText}`);
+      }
+
+      if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+        throw new Error('Received an HTML page instead of JSON.');
+      }
+
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonErr: any) {
+        throw new Error(`Failed to parse Web App response as JSON: ${jsonErr.message}.`);
+      }
+
+      if (data && data.success === false) {
+        throw new Error(data.error || 'Apps Script backend returned an error.');
+      }
+
+      console.log('[Sheets Database] Successfully saved vendor via Apps Script Web App:', payload.id);
+      return res.status(200).json({
+        success: true,
+        message: 'Vendor successfully written to Google Sheets via Apps Script.',
+      });
+    } catch (err: any) {
+      console.warn('[Sheets Database] Failed to save vendor via Apps Script Web App, attempting fallbacks:', err.message || err);
+    }
+  }
+
+  // 2. Fallback to Google Cloud Service Account method if configured
+  if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
+    console.log('[Sheets Database] Google Sheets configuration (either Web App URL or Service Account) is missing or has failed. Running in simulation mode.');
+    return res.status(200).json({
+      success: true,
+      message: 'Google Sheets vendor backup simulation succeeded. (Please configure GOOGLE_SPREADSHEET_ID and service account credentials to write to real sheets).',
+      simulated: true
+    });
+  }
+
+  try {
+    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+
+    const auth = new google.auth.JWT({
+      email: serviceAccountEmail,
+      key: privateKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const range = `${sheetName}!A:L`;
+
+    // Get existing rows to verify and enforce duplicate prevention
+    let existingRows: any[][] = [];
+    try {
+      const getResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+      });
+      existingRows = getResponse.data.values || [];
+    } catch (getErr: any) {
+      console.log(`[Sheets Database] Target sheet "${sheetName}" might be empty or uninitialized:`, getErr.message);
+    }
+
+    const vendorId = payload.id;
+    const isDuplicate = existingRows.some(row => row[11] === vendorId || row[0] === vendorId);
+
+    if (isDuplicate) {
+      console.log(`[Sheets Database] Vendor ID ${vendorId} is already present in Google Sheets. Skipping to prevent duplicates.`);
+      return res.status(200).json({
+        success: true,
+        message: 'Duplicate record skipped.',
+      });
+    }
+
+    const rowData = [
+      payload.businessName,
+      payload.contactPerson,
+      formattedContactNumber,
+      payload.email,
+      payload.category,
+      payload.productsOrServices,
+      payload.socialMediaLinks,
+      payload.stallSize,
+      payload.electricityRequired,
+      payload.additionalRequests || '',
+      payload.createdAt || new Date().toISOString(),
+      payload.id
+    ];
+
+    if (existingRows.length === 0) {
+      const headers = [
+        'Business Name',
+        'Contact Person',
+        'Contact Number',
+        'Email',
+        'Category',
+        'Products / Services',
+        'Social Media Links',
+        'Stall Size',
+        'Electricity Required',
+        'Additional Requests',
+        'Timestamp',
+        'Vendor ID'
+      ];
+      
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [headers, rowData],
+        },
+      });
+      console.log('[Sheets Database] Sheet initialized with headers and successfully appended vendor:', vendorId);
+    } else {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [rowData],
+        },
+      });
+      console.log('[Sheets Database] Successfully appended vendor to Google Sheets:', vendorId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Vendor successfully written to Google Sheets.',
+    });
+
+  } catch (error: any) {
+    console.error('[Sheets Database] Failed to append vendor to Google Sheets:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Google Sheets API error: ' + (error.message || error),
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // SMTP Transporter and Email Notification Service
 // ---------------------------------------------------------------------------
@@ -597,7 +791,18 @@ app.post('/api/reset-registrations', async (req, res) => {
       range: `${sheetName}!A2:Z10000`,
     });
 
-    console.log('[Sheets Database] Successfully cleared Google Sheets registrations.');
+    // Also clear vendors sheet
+    const vendorSheetName = process.env.GOOGLE_SHEET_VENDORS_NAME || 'Vendors';
+    try {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId,
+        range: `${vendorSheetName}!A2:Z10000`,
+      });
+    } catch (vErr: any) {
+      console.log('[Sheets Database] Could not clear vendor sheet:', vErr.message);
+    }
+
+    console.log('[Sheets Database] Successfully cleared Google Sheets registrations and vendors.');
     return res.json({ success: true, message: 'Google Sheets registrations reset successfully.' });
   } catch (error: any) {
     console.error('[Sheets Database] Failed to clear Google Sheets:', error);
@@ -744,6 +949,122 @@ app.get('/api/registrations', async (req, res) => {
     return res.json({
       success: true,
       registrations: [],
+      error: error.message || error
+    });
+  }
+});
+
+// GET Vendors from Google Sheets (or fallback)
+app.get('/api/vendors', async (req, res) => {
+  const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+  const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+  const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = cleanSpreadsheetId(rawSpreadsheetId);
+  const sheetName = process.env.GOOGLE_SHEET_VENDORS_NAME || 'Vendors';
+
+  if (webAppUrl) {
+    try {
+      if (!webAppUrl.includes('docs.google.com/spreadsheets')) {
+        console.log('[Sheets Database] WebApp URL configured. Fetching vendors via Apps Script Web App...');
+        const response = await fetch(`${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}type=vendors`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+        if (response.ok) {
+          const responseText = await response.text();
+          if (!responseText.trim().startsWith('<!DOCTYPE') && !responseText.trim().startsWith('<html')) {
+            let data: any;
+            try {
+              data = JSON.parse(responseText);
+            } catch (jsonErr: any) {
+              console.log('[Sheets Database] Response parsing parsed with issues.');
+            }
+
+            if (data && data.success && Array.isArray(data.vendors)) {
+              console.log(`[Sheets Database] Successfully fetched ${data.vendors.length} vendors via Apps Script Web App.`);
+              return res.json({
+                success: true,
+                vendors: data.vendors,
+              });
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.log('[Sheets Database] Web App fetch bypassed for vendors.');
+    }
+  }
+
+  if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
+    console.log('[Sheets Database] Service account config missing for GET vendors. Returning empty list.');
+    return res.json({ success: true, vendors: [] });
+  }
+
+  try {
+    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    const auth = new google.auth.JWT({
+      email: serviceAccountEmail,
+      key: privateKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const range = `${sheetName}!A:L`;
+
+    const getResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+    });
+
+    const rows = getResponse.data.values || [];
+    if (rows.length <= 1) {
+      return res.json({ success: true, vendors: [] });
+    }
+
+    const headers = rows[0];
+    const bizNameIndex = headers.indexOf('Business Name');
+    const contactIndex = headers.indexOf('Contact Person');
+    const numberIndex = headers.indexOf('Contact Number');
+    const emailIndex = headers.indexOf('Email');
+    const categoryIndex = headers.indexOf('Category');
+    const productsIndex = headers.indexOf('Products / Services');
+    const socialIndex = headers.indexOf('Social Media Links');
+    const sizeIndex = headers.indexOf('Stall Size');
+    const electricityIndex = headers.indexOf('Electricity Required');
+    const additionalIndex = headers.indexOf('Additional Requests');
+    const timestampIndex = headers.indexOf('Timestamp');
+    const idIndex = headers.indexOf('Vendor ID');
+
+    const vendors = rows.slice(1).map((row, i) => {
+      return {
+        id: idIndex !== -1 ? row[idIndex] : (row[11] || `vendor_sheets_${i}`),
+        businessName: bizNameIndex !== -1 ? row[bizNameIndex] : (row[0] || ''),
+        contactPerson: contactIndex !== -1 ? row[contactIndex] : (row[1] || ''),
+        contactNumber: numberIndex !== -1 ? row[numberIndex] : (row[2] || ''),
+        email: emailIndex !== -1 ? row[emailIndex] : (row[3] || ''),
+        category: categoryIndex !== -1 ? row[categoryIndex] : (row[4] || 'Other'),
+        productsOrServices: productsIndex !== -1 ? row[productsIndex] : (row[5] || ''),
+        socialMediaLinks: socialIndex !== -1 ? row[socialIndex] : (row[6] || ''),
+        stallSize: sizeIndex !== -1 ? row[sizeIndex] : (row[7] || 'Small (3m x 3m)'),
+        electricityRequired: electricityIndex !== -1 ? row[electricityIndex] : (row[8] || 'No'),
+        additionalRequests: additionalIndex !== -1 ? row[additionalIndex] : (row[9] || ''),
+        createdAt: timestampIndex !== -1 ? row[timestampIndex] : (row[10] || new Date().toISOString()),
+        country: 'Botswana'
+      };
+    });
+
+    return res.json({
+      success: true,
+      vendors,
+    });
+  } catch (error: any) {
+    console.error('[Sheets Database] Failed to query vendors from Google Sheets:', error);
+    return res.json({
+      success: true,
+      vendors: [],
       error: error.message || error
     });
   }

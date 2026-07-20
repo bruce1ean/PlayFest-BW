@@ -130,15 +130,6 @@ export default function HeroSection({
       }
     },
     {
-      id: 'partner',
-      label: 'BECOME A PARTNER',
-      description: 'Align your business or brand with thousands of Botswana\'s car builders, retro & next-gen gamers, content creators, and lifestyle demographics.',
-      action: () => {
-        storage.trackClick('gta-menu-partner');
-        onPartnerClick();
-      }
-    },
-    {
       id: 'feedback',
       label: 'SPEAK YOUR MIND',
       description: 'Influence event categories, list favorite gaming titles, suggest auto builders, and cast community votes on the live bulletin feedback board.',
@@ -159,7 +150,7 @@ export default function HeroSection({
     {
       id: 'admin',
       label: 'ORGANIZER PORTAL',
-      description: 'Authorized personnel access gateway. Monitor registration trends, city check-ins, vendor approvals, and live bulletin submissions.',
+      description: 'Authorized personnel access gateway. Monitor registration trends, city check-ins, demographic listings, and live bulletin submissions.',
       action: () => {
         storage.trackClick('gta-menu-admin');
         if (onAdminClick) onAdminClick();
@@ -428,7 +419,7 @@ export default function HeroSection({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
           <div className="flex items-center gap-3 p-3 rounded-xl bg-black/60 border border-white/5 hover:border-[#ec4899]/35 transition-all">
             <div className="p-2 rounded-lg bg-[#ec4899]/10 text-[#ec4899]">
               <Users className="w-4 h-4" />
@@ -466,16 +457,6 @@ export default function HeroSection({
             <div>
               <div className="text-[10px] font-mono text-gray-500 uppercase">TUNER CAR BUILDS</div>
               <div className="text-base font-black text-white font-display tracking-tight">{stats.cars}</div>
-            </div>
-          </div>
-
-          <div className="col-span-2 sm:col-span-1 flex items-center gap-3 p-3 rounded-xl bg-black/60 border border-white/5 hover:border-cyan-400/35 transition-all">
-            <div className="p-2 rounded-lg bg-cyan-400/10 text-cyan-400">
-              <Store className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[10px] font-mono text-gray-500 uppercase">APPROVED VENDORS</div>
-              <div className="text-base font-black text-white font-display tracking-tight">{stats.vendors}</div>
             </div>
           </div>
         </div>

@@ -7,7 +7,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Settings, 
-  Send 
+  Send,
+  Gamepad2,
+  Car,
+  Music,
+  Star,
+  Users
 } from 'lucide-react';
 
 import HeroSection from './components/HeroSection';
@@ -20,15 +25,16 @@ import SuccessPage from './components/SuccessPage';
 import AdminDashboard from './components/AdminDashboard';
 import LoginPage from './components/LoginPage';
 import CustomToast, { ToastMessage } from './components/CustomToast';
+import playfestLogo from './assets/images/playfest_header_banner_premium_1784061639206.jpg';
 
 import { storage } from './lib/storage';
 import { sounds } from './lib/sounds';
-import { AttendeeRegistration, VendorApplication } from './types';
+import { AttendeeRegistration } from './types';
 
 export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [viewState, setViewState] = useState<'home' | 'register' | 'login' | 'success' | 'admin' | 'feedback'>('home');
-  const [lastSubmissionType, setLastSubmissionType] = useState<'attendee' | 'vendor'>('attendee');
+  
   const [lastSubmissionDetails, setLastSubmissionDetails] = useState<any>(null);
 
   // Stats Counters
@@ -58,7 +64,7 @@ export default function App() {
   const syncServerStats = async () => {
     try {
       const allRegs = await storage.getRegistrations();
-      const allVendors = await storage.getVendorApplications();
+      
       
       const citiesCount = new Set(allRegs.map((r) => r.city.toLowerCase())).size;
       const gamersCount = allRegs.filter((r) => r.interests.includes('gaming')).length;
@@ -69,7 +75,7 @@ export default function App() {
         cities: citiesCount,
         gamers: gamersCount,
         cars: carsCount,
-        vendors: allVendors.length
+        vendors: 0
       });
     } catch {
       // Soft fail
@@ -82,8 +88,8 @@ export default function App() {
     syncServerStats();
   }, []);
 
-  const handleRegisterSuccess = (data: AttendeeRegistration | VendorApplication, type: 'attendee' | 'vendor') => {
-    setLastSubmissionType(type);
+  const handleRegisterSuccess = (data: AttendeeRegistration) => {
+    
     setLastSubmissionDetails(data);
     setViewState('success');
     sounds.playSuccess();
@@ -145,82 +151,71 @@ export default function App() {
       
       {/* Dynamic Background Stars Ambient Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />
-      
-      {/* Navigation Header bar */}
-      <header className="fixed top-0 inset-x-0 h-20 bg-[#05020c]/70 backdrop-blur-xl border-b border-white/5 z-40 flex items-center justify-between px-6 sm:px-12">
-        <div 
-          onClick={navigateToHome}
-          className="flex items-center gap-2 cursor-pointer group"
-        >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold font-display uppercase shadow-[0_0_15px_rgba(236,72,153,0.3)] group-hover:scale-105 transition-all">
-            P
-          </div>
-          <span className="font-display font-black text-xl tracking-wider text-white uppercase">
-            PLAY<span className="text-pink-500">FEST</span>
-          </span>
-        </div>
+      {/* Navigation Header Banner */}
+      <header className="relative w-full bg-[#05020c] border-b border-white/5">
+        <div className="relative w-full max-w-7xl mx-auto">
+          <img 
+            src={playfestLogo} 
+            alt="PlayFest 2026 Botswana Banner" 
+            className="w-full h-auto object-contain select-none block"
+            referrerPolicy="no-referrer"
+          />
 
-        {/* Desktop navbar options */}
-        <nav className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-gray-400">
-          <button 
-            onClick={navigateToHome} 
-            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'home' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
-          >
-            Home
-          </button>
-          <button 
-            onClick={navigateToRegister} 
-            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'register' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
-          >
-            RSVP & Vendor
-          </button>
-          <button 
-            onClick={navigateToFeedback} 
-            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'feedback' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
-          >
-            Speak Your Mind
-          </button>
-          <button 
-            onClick={navigateToLogin} 
-            className={`hover:text-white transition-colors cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'login' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
-          >
-            My Pass / Log In
-          </button>
-          <button 
+          {/* Invisible floating settings button precisely overlaying the gear icon in the image */}
+          <button
             onClick={() => {
               storage.trackClick('btn-admin-gate');
-              setViewState('admin');
-            }}
-            className={`hover:text-pink-400 text-glow-pink transition-colors font-mono cursor-pointer bg-transparent border-0 outline-none pb-1 ${viewState === 'admin' ? 'text-pink-500 font-bold border-b-2 border-pink-500' : ''}`}
-          >
-            Organizer Console
-          </button>
-        </nav>
-
-        {/* Main Header CTA Buttons */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              storage.trackClick('btn-admin-mobile-gate');
               setViewState(viewState === 'admin' ? 'home' : 'admin');
+              sounds.playSelect();
             }}
-            className="md:hidden p-2 rounded-lg bg-white/5 text-gray-300 hover:text-white border border-white/5"
-            title="Organizer Gate"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={navigateToRegister}
-            className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-pink-500 to-purple-600 font-display font-bold text-xs uppercase tracking-wider text-white hover:shadow-[0_0_15px_rgba(236,72,153,0.3)] cursor-pointer transition-all"
-          >
-            RSVP FOR FREE
-          </button>
+            className="absolute top-[3%] right-[3%] w-[12%] aspect-square cursor-pointer z-50 bg-transparent border-none outline-none opacity-0"
+            title="Organizer Console"
+            aria-label="Settings"
+          />
         </div>
       </header>
 
+      {/* Premium Glassmorphic Navbar Strip below the header */}
+      <div className="w-full bg-[#050509]/95 backdrop-blur-md border-b border-white/5 py-4 px-6 z-30 relative">
+        <nav className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-4 sm:gap-10 text-xs font-semibold uppercase tracking-widest text-gray-400">
+          {[
+            { id: 'home', label: 'Home' },
+            { id: 'register', label: 'RSVP Ticket' },
+            { id: 'feedback', label: 'Speak Your Mind' },
+            { id: 'login', label: 'My Pass / Log In' }
+          ].map((tab) => {
+            const isActive = viewState === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  if (tab.id === 'home') navigateToHome();
+                  else if (tab.id === 'register') navigateToRegister();
+                  else if (tab.id === 'feedback') navigateToFeedback();
+                  else if (tab.id === 'login') navigateToLogin();
+                }}
+                className={`relative pb-2 cursor-pointer bg-transparent border-0 outline-none transition-colors duration-300 uppercase tracking-widest text-xs font-bold ${
+                  isActive 
+                    ? 'text-pink-500 text-shadow-[0_0_10px_rgba(236,72,153,0.5)]' 
+                    : 'text-gray-400 hover:text-white hover:text-shadow-[0_0_8px_rgba(255,255,255,0.4)]'
+                }`}
+              >
+                {tab.label}
+                {isActive && (
+                  <motion.div
+                    layoutId="activeHeaderTab"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-pink-500 to-purple-600 shadow-[0_0_8px_rgba(236,72,153,0.8)]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
       {/* Primary Dynamic Main Body Switch */}
-      <main className="relative z-10 pt-20">
+      <main className="relative z-10 pt-4">
         <AnimatePresence mode="wait">
           
           {/* VIEW: ADMIN ORGANIZER CONSOLE */}
@@ -249,7 +244,7 @@ export default function App() {
               transition={{ duration: 0.4 }}
             >
               <SuccessPage
-                registrationType={lastSubmissionType}
+                
                 registeredDetails={lastSubmissionDetails}
                 onBackToHome={() => setViewState('home')}
                 addToast={addToast}
@@ -269,8 +264,8 @@ export default function App() {
               <LoginPage 
                 onSuccessAttendee={(details) => {
                   setLastSubmissionDetails(details);
-                  const type = details.businessName ? 'vendor' : 'attendee';
-                  setLastSubmissionType(type);
+                  const type = 'attendee';
+                  
                   setViewState('success');
                 }}
                 onSuccessOrganizer={() => {
@@ -354,31 +349,7 @@ export default function App() {
               {/* 4. FAQs Section */}
               <TestimonialsFAQ />
 
-              {/* 6. Sponsor Spotlight Strip */}
-              <section className="py-16 px-4 bg-black/40 border-t border-b border-white/5 text-center relative overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-500/5 blur-3xl pointer-events-none rounded-full" />
-                
-                <h4 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-2 font-mono">
-                  Partner Spotlight
-                </h4>
-                <p className="text-sm text-gray-400 font-light max-w-xl mx-auto mb-10">
-                  Ready to align your brand with thousands of Botswana's car tuning, gaming arena enthusiasts, and lifestyle demographics?
-                </p>
 
-                <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 opacity-30 select-none mb-10">
-                  <div className="px-6 py-4 rounded-xl border-2 border-dashed border-white/20 font-display font-medium text-xs uppercase tracking-wider text-gray-400">
-                    YOUR BRAND HERE
-                  </div>
-                </div>
-
-                <button
-                  id="partner-low-enquiry-cta"
-                  onClick={navigateToRegister}
-                  className="px-8 py-3 rounded-lg bg-glassmorphism border border-white/10 hover:border-pink-500/20 text-xs font-bold font-display uppercase tracking-wider text-pink-400 hover:text-white transition-all cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" /> SUBMIT BRAND ENQUIRY
-                </button>
-              </section>
 
               {/* Footer Block */}
               <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 relative z-10 text-gray-400">
