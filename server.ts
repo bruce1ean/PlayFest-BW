@@ -1075,6 +1075,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', backupSystemActive: !!(process.env.GOOGLE_SPREADSHEET_ID) });
 });
 
+// Serve custom favicon directly to prevent caching and path resolution issues in development
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'src/assets/images/playfest_favicon_1784490332136.jpg'));
+});
+
 // Configure Vite middleware / static files serving
 async function setupRouting() {
   if (process.env.NODE_ENV !== 'production') {
