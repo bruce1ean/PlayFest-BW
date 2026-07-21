@@ -22,7 +22,9 @@ import {
   CheckCircle,
   Ticket,
   Mail,
-  Eye
+  Eye,
+  Lock,
+  EyeOff
 } from 'lucide-react';
 import { AttendeeRegistration } from '../types';
 import { storage } from '../lib/storage';
@@ -39,6 +41,25 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Admin authentication state
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState(false);
+
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sounds.playSelect();
+    if (passwordInput === 'Tomcruise@16') {
+      setIsAuthenticated(true);
+      setAuthError(false);
+      addToast('Authorized access granted. Decrypting telemetry...', 'success');
+    } else {
+      setAuthError(true);
+      addToast('Access denied. Invalid password signature.', 'error');
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -173,6 +194,96 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   const carShowcaseCount = regs.filter(r => r.interests.includes('car_meet')).length;
   const gamingChallengersCount = regs.filter(r => r.interests.includes('gaming') && r.gamingDetails?.participateInTournaments === 'Yes').length;
   const vipProspectsCount = regs.filter(r => r.vipInterest === 'Yes').length;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#06040f] text-white flex flex-col justify-center items-center p-6 relative overflow-hidden">
+        {/* Glowing background circles */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-pink-500/10 blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-purple-600/10 blur-[100px] pointer-events-none" />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-md bg-black/60 border border-white/10 rounded-2xl p-8 backdrop-blur-md shadow-2xl relative"
+        >
+          {/* Top aesthetic color bar */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-pink-500 via-purple-600 to-cyan-500 rounded-t-2xl" />
+
+          <div className="text-center space-y-4 mb-6">
+            <div className="mx-auto w-12 h-12 rounded-full bg-pink-500/10 flex items-center justify-center border border-pink-500/25">
+              <Lock className="w-5 h-5 text-pink-400 animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black font-display tracking-wider uppercase text-white">
+                ORGANIZER VERIFICATION
+              </h2>
+              <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mt-1">
+                SECURE SIGNATURE ENCRYPTED GATEWAY
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div className="space-y-1.5 relative">
+              <label className="text-[10px] uppercase font-mono tracking-widest text-gray-400 font-bold">
+                ENTER CONTROL PASSWORD
+              </label>
+              <div className="relative">
+                <input
+                  required
+                  type={showPassword ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (authError) setAuthError(false);
+                  }}
+                  placeholder="••••••••••••••"
+                  className={`w-full px-4 py-3 rounded-xl bg-black/80 border text-white font-mono text-sm placeholder-gray-600 focus:outline-none transition-all pr-12 ${
+                    authError 
+                      ? 'border-red-500/50 focus:border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.15)]' 
+                      : 'border-white/10 focus:border-pink-500 focus:shadow-[0_0_15px_rgba(236,72,153,0.15)]'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white cursor-pointer bg-transparent border-0 p-1"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {authError && (
+                <p className="text-[10px] text-red-500 font-mono mt-1">
+                  ⚠ Error: Access signature is rejected or invalid.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-cyan-500 font-display font-black text-xs uppercase tracking-widest text-white shadow-[0_0_20px_rgba(236,72,153,0.25)] hover:shadow-[0_0_30px_rgba(236,72,153,0.45)] hover:scale-[1.01] transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>DECRYPT & CONNECT</span>
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-white/5 flex justify-center">
+            <button
+              onClick={() => {
+                sounds.playSelect();
+                onClose();
+              }}
+              className="text-[10px] font-mono uppercase tracking-wider text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> CANCEL & RETURN
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#06040f] text-white p-6 sm:p-8 overflow-y-auto">

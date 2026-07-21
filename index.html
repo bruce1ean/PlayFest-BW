@@ -7,21 +7,69 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=2" />
     <script>
-      // Gracefully catch and silence benign Vite HMR/WebSocket errors, as HMR is disabled by the development platform.
+      // Forcefully suppress Vite HMR/WebSocket errors because HMR is disabled in this environment.
+      (function() {
+        const OrigWebSocket = window.WebSocket;
+        if (OrigWebSocket) {
+          const WrappedWebSocket = function(url, protocols) {
+            // Check if this is a Vite HMR connection attempt
+            if (protocols === 'vite-hmr' || (typeof url === 'string' && (url.includes('hmr') || url.includes('vite') || url.includes('ws://') || url.includes('wss://')))) {
+              // Return a silent mock WebSocket that never fails or attempts to connect
+              return {
+                url: url,
+                readyState: 3, // CLOSED state
+                addEventListener: function(event, cb) {
+                  // Ignore listeners, do not fire any events to prevent errors
+                },
+                removeEventListener: function() {},
+                send: function() {},
+                close: function() {},
+                bufferedAmount: 0,
+                extensions: "",
+                protocol: protocols || "",
+                binaryType: "blob"
+              };
+            }
+            try {
+              return new OrigWebSocket(url, protocols);
+            } catch (err) {
+              return {};
+            }
+          };
+          WrappedWebSocket.prototype = OrigWebSocket.prototype;
+          for (const key in OrigWebSocket) {
+            if (Object.prototype.hasOwnProperty.call(OrigWebSocket, key)) {
+              WrappedWebSocket[key] = OrigWebSocket[key];
+            }
+          }
+          WrappedWebSocket.CONNECTING = 0;
+          WrappedWebSocket.OPEN = 1;
+          WrappedWebSocket.CLOSING = 2;
+          WrappedWebSocket.CLOSED = 3;
+          window.WebSocket = WrappedWebSocket;
+        }
+      })();
+
       window.addEventListener('unhandledrejection', function(event) {
-        if (event.reason && (
-          event.reason.message === 'WebSocket closed without opened.' ||
-          (typeof event.reason.message === 'string' && event.reason.message.includes('WebSocket')) ||
-          (typeof event.reason === 'string' && event.reason.includes('WebSocket'))
+        const msg = event.reason && (event.reason.message || event.reason);
+        if (msg && typeof msg === 'string' && (
+          msg.includes('WebSocket') || 
+          msg.includes('websocket') || 
+          msg.includes('ws://') || 
+          msg.includes('wss://')
         )) {
           event.preventDefault();
           event.stopPropagation();
         }
-      });
+      }, true);
+
       window.addEventListener('error', function(event) {
-        if (event.message && (
-          event.message.includes('WebSocket') || 
-          event.message.includes('websocket')
+        const msg = event.message || '';
+        if (msg && typeof msg === 'string' && (
+          msg.includes('WebSocket') || 
+          msg.includes('websocket') || 
+          msg.includes('ws://') || 
+          msg.includes('wss://')
         )) {
           event.preventDefault();
           event.stopPropagation();
