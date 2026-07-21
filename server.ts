@@ -728,6 +728,14 @@ app.post('/api/send-confirmation', async (req, res) => {
     console.log(htmlContent.replace(/<[^>]*>/g, '').trim().substring(0, 250) + '...');
     console.log('=============================================================\n');
 
+    // Admin alert simulation
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'admin@playfest2026.bw';
+    console.log('\n=============================================================');
+    console.log('🔔  [EMAIL SIMULATION] Admin alert notification generated successfully!');
+    console.log(`TO ADMIN: ${adminEmail}`);
+    console.log(`SUBJECT:  🔔 New ${type === 'attendee' ? 'Attendee Registered' : 'Newsletter Subscriber'} Alert`);
+    console.log('=============================================================\n');
+
     return res.status(200).json({
       success: true,
       message: 'Email confirmation simulation succeeded.',
@@ -735,6 +743,12 @@ app.post('/api/send-confirmation', async (req, res) => {
     });
   }
 
+  let userEmailSuccess = false;
+  let adminEmailSuccess = false;
+  let userError = null;
+  let adminError = null;
+
+  // 1. Send confirmation email to the user
   try {
     await transporterInstance.sendMail({
       from: fromHeader,
@@ -742,19 +756,138 @@ app.post('/api/send-confirmation', async (req, res) => {
       subject: subject,
       html: htmlContent,
     });
-
+    userEmailSuccess = true;
     console.log(`[Email System] Successfully sent ${type} confirmation email to:`, targetEmail);
-    return res.status(200).json({
-      success: true,
-      message: 'Email confirmation successfully sent via SMTP.',
-    });
   } catch (error: any) {
-    console.error(`[Email System] Failed to send email to ${targetEmail} via SMTP:`, error.message || error);
-    // Return 200 with simulated: false and error in warning so the frontend flow remains unbroken!
+    userError = error.message || error;
+    console.error(`[Email System] Failed to send email to ${targetEmail} via SMTP:`, userError);
+  }
+
+  // 2. Send notification alert to the administrator
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  if (adminEmail && adminEmail.trim()) {
+    try {
+      let adminSubject = '';
+      let adminHtml = '';
+
+      if (type === 'attendee') {
+        adminSubject = `🔔 New Attendee Registered: ${data.fullName}`;
+        adminHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 20px; background-color: #f4f4f7; }
+    .card { border: 1px solid #e1e1e6; border-radius: 8px; padding: 24px; max-width: 600px; background-color: #ffffff; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h2 { color: #8b5cf6; margin-top: 0; font-size: 20px; border-bottom: 2px solid #f4f4f7; padding-bottom: 12px; }
+    p { font-size: 14px; color: #555; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    td { padding: 10px; border-bottom: 1px solid #f4f4f7; font-size: 14px; }
+    .label { font-weight: bold; width: 35%; color: #666; }
+    .value { color: #111; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🎉 New PlayFest 2026 Registration!</h2>
+    <p>A new attendee has successfully registered. Here are the attendee details:</p>
+    <table>
+      <tr>
+        <td class="label">Full Name</td>
+        <td class="value">${data.fullName}</td>
+      </tr>
+      <tr>
+        <td class="label">Email Address</td>
+        <td class="value"><a href="mailto:${data.email}">${data.email}</a></td>
+      </tr>
+      <tr>
+        <td class="label">Phone Number</td>
+        <td class="value">${data.phoneNumber || 'N/A'}</td>
+      </tr>
+      <tr>
+        <td class="label">Country / City</td>
+        <td class="value">${data.country || 'Botswana'} / ${data.city || 'N/A'}</td>
+      </tr>
+      <tr>
+        <td class="label">Age Group</td>
+        <td class="value">${data.ageGroup || 'N/A'}</td>
+      </tr>
+      <tr>
+        <td class="label">Ticket RSVP Type</td>
+        <td class="value">${data.vipInterest === 'Yes' ? 'VIP Giveaway Entry & Priority Waitlist' : 'General Entry'}</td>
+      </tr>
+      <tr>
+        <td class="label">Interests</td>
+        <td class="value">${Array.isArray(data.interests) ? data.interests.join(', ') : 'General Interest'}</td>
+      </tr>
+    </table>
+    <p style="font-size: 11px; color: #94a3b8; margin-top: 25px; text-align: center; border-top: 1px solid #f4f4f7; padding-top: 15px;">
+      Sent automatically by PlayFest Platform.
+    </p>
+  </div>
+</body>
+</html>
+        `;
+      } else if (type === 'subscriber') {
+        adminSubject = `📧 New Newsletter Subscriber: ${data.email}`;
+        adminHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 20px; background-color: #f4f4f7; }
+    .card { border: 1px solid #e1e1e6; border-radius: 8px; padding: 24px; max-width: 600px; background-color: #ffffff; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h2 { color: #ec4899; margin-top: 0; font-size: 20px; border-bottom: 2px solid #f4f4f7; padding-bottom: 12px; }
+    p { font-size: 14px; color: #555; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📧 New Newsletter Subscriber!</h2>
+    <p>A new visitor has subscribed to the PlayFest 2026 newsletter:</p>
+    <p style="background-color: #f8fafc; padding: 12px; border-radius: 6px; font-weight: bold; border: 1px solid #e2e8f0; font-size: 15px;">
+      Email: <a href="mailto:${data.email}">${data.email}</a>
+    </p>
+    <p style="font-size: 11px; color: #94a3b8; margin-top: 25px; text-align: center; border-top: 1px solid #f4f4f7; padding-top: 15px;">
+      Sent automatically by PlayFest Platform.
+    </p>
+  </div>
+</body>
+</html>
+        `;
+      }
+
+      await transporterInstance.sendMail({
+        from: fromHeader,
+        to: adminEmail.trim(),
+        subject: adminSubject,
+        html: adminHtml,
+      });
+      adminEmailSuccess = true;
+      console.log(`[Email System] Successfully sent admin notification email to:`, adminEmail);
+    } catch (error: any) {
+      adminError = error.message || error;
+      console.error(`[Email System] Failed to send admin notification to ${adminEmail} via SMTP:`, adminError);
+    }
+  }
+
+  // Combine and respond
+  if (userEmailSuccess) {
     return res.status(200).json({
       success: true,
-      message: 'SMTP delivery failed, registration complete.',
-      warning: 'Could not deliver email: ' + (error.message || error),
+      message: adminEmailSuccess 
+        ? 'Email confirmation and admin notification successfully sent via SMTP.'
+        : 'Email confirmation successfully sent via SMTP (admin alert failed).',
+      adminNotificationSent: adminEmailSuccess,
+      adminWarning: adminError ? 'Admin alert failed: ' + adminError : undefined
+    });
+  } else {
+    return res.status(200).json({
+      success: true,
+      message: 'SMTP delivery failed for attendee registration.',
+      warning: 'Could not deliver attendee confirmation email: ' + userError,
+      adminNotificationSent: adminEmailSuccess,
+      adminWarning: adminError ? 'Admin alert failed: ' + adminError : undefined
     });
   }
 });
