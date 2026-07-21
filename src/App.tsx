@@ -33,7 +33,7 @@ import { AttendeeRegistration } from './types';
 
 export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [viewState, setViewState] = useState<'home' | 'register' | 'login' | 'success' | 'admin' | 'feedback'>('home');
+  const [viewState, setViewState] = useState<'home' | 'register' | 'success' | 'admin' | 'feedback'>('home');
   
   const [lastSubmissionDetails, setLastSubmissionDetails] = useState<any>(null);
 
@@ -132,13 +132,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const navigateToLogin = () => {
-    storage.trackClick('btn-navigate-login');
-    sounds.playSelect();
-    setViewState('login');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const navigateToFeedback = () => {
     storage.trackClick('btn-navigate-feedback');
     sounds.playSelect();
@@ -181,10 +174,9 @@ export default function App() {
           {[
             { id: 'home', label: 'Home' },
             { id: 'register', label: 'RSVP Ticket' },
-            { id: 'feedback', label: 'Speak Your Mind' },
-            { id: 'login', label: 'My Pass / Log In' }
+            { id: 'feedback', label: 'Speak Your Mind' }
           ].map((tab) => {
-            const isActive = viewState === tab.id;
+            const isActive = viewState === (tab.id as any);
             return (
               <button
                 key={tab.id}
@@ -192,7 +184,6 @@ export default function App() {
                   if (tab.id === 'home') navigateToHome();
                   else if (tab.id === 'register') navigateToRegister();
                   else if (tab.id === 'feedback') navigateToFeedback();
-                  else if (tab.id === 'login') navigateToLogin();
                 }}
                 className={`relative pb-2 cursor-pointer bg-transparent border-0 outline-none transition-colors duration-300 uppercase tracking-widest text-xs font-bold ${
                   isActive 
@@ -252,42 +243,6 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* VIEW: LOGIN & PASS CHECKUP PORTAL */}
-          {viewState === 'login' && (
-            <motion.div
-              key="login-portal-view"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-            >
-              <LoginPage 
-                onSuccessAttendee={(details) => {
-                  setLastSubmissionDetails(details);
-                  const type = 'attendee';
-                  
-                  setViewState('success');
-                }}
-                onSuccessOrganizer={() => {
-                  setViewState('admin');
-                }}
-                onNavigateToRegister={navigateToRegister}
-                addToast={addToast}
-              />
-              
-              {/* Footer Block */}
-              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
-                  <div>© {new Date().getFullYear()} PlayFest Gaborone. Designed Mobile-First.</div>
-                  <div className="flex gap-4">
-                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
-                    <a href="#" className="hover:text-pink-500">TikTok</a>
-                  </div>
-                </div>
-              </footer>
-            </motion.div>
-          )}
-
           {/* VIEW: STANDALONE REGISTER STEP FORM */}
           {viewState === 'register' && (
             <motion.div
@@ -332,7 +287,6 @@ export default function App() {
                 onRegisterClick={navigateToRegister}
                 onPartnerClick={navigateToRegister}
                 onFeedbackClick={navigateToFeedback}
-                onLoginClick={navigateToLogin}
                 onAdminClick={() => {
                   storage.trackClick('btn-admin-gate');
                   setViewState('admin');

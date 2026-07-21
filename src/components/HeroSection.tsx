@@ -29,7 +29,6 @@ interface HeroSectionProps {
   onRegisterClick: () => void;
   onPartnerClick: () => void;
   onFeedbackClick?: () => void;
-  onLoginClick?: () => void;
   onAdminClick?: () => void;
   stats: {
     total: number;
@@ -44,7 +43,6 @@ export default function HeroSection({
   onRegisterClick, 
   onPartnerClick, 
   onFeedbackClick,
-  onLoginClick,
   onAdminClick,
   stats 
 }: HeroSectionProps) {
@@ -57,8 +55,6 @@ export default function HeroSection({
     seconds: 0,
   });
 
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const [lastPlayedIndex, setLastPlayedIndex] = useState(0);
   const [systemTime, setSystemTime] = useState('');
   const [ping, setPing] = useState(18);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
@@ -87,14 +83,6 @@ export default function HeroSection({
     return () => clearInterval(pingTimer);
   }, []);
 
-  // Trigger hover tick whenever selected index moves (both keyboard or mouse hover)
-  useEffect(() => {
-    if (focusedIndex !== lastPlayedIndex) {
-      sounds.playHover();
-      setLastPlayedIndex(focusedIndex);
-    }
-  }, [focusedIndex, lastPlayedIndex]);
-
   // Countdown calculations
   useEffect(() => {
     const updateCountdown = () => {
@@ -118,64 +106,6 @@ export default function HeroSection({
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const menuItems = [
-    {
-      id: 'rsvp',
-      label: 'REGISTER & WIN VIP PASS',
-      description: 'Register now to stand a chance to win a free VIP Pass and participate in exciting giveaways! Registration does not guarantee a VIP pass, but secures your place in our prize draws and priority waitlist.',
-      action: () => {
-        storage.trackClick('gta-menu-rsvp');
-        onRegisterClick();
-      }
-    },
-    {
-      id: 'feedback',
-      label: 'SPEAK YOUR MIND',
-      description: 'Influence event categories, list favorite gaming titles, suggest auto builders, and cast community votes on the live bulletin feedback board.',
-      action: () => {
-        storage.trackClick('gta-menu-feedback');
-        if (onFeedbackClick) onFeedbackClick();
-      }
-    },
-    {
-      id: 'login',
-      label: 'MY ENTRY / RETRIEVE REGISTRATION',
-      description: 'Access your registration details, view your dynamic entry confirmation, or update food & merchant stall setup credentials.',
-      action: () => {
-        storage.trackClick('gta-menu-login');
-        if (onLoginClick) onLoginClick();
-      }
-    },
-    {
-      id: 'admin',
-      label: 'ORGANIZER PORTAL',
-      description: 'Authorized personnel access gateway. Monitor registration trends, city check-ins, demographic listings, and live bulletin submissions.',
-      action: () => {
-        storage.trackClick('gta-menu-admin');
-        if (onAdminClick) onAdminClick();
-      }
-    }
-  ];
-
-  // Bind Keyboard navigation like a console/GTA game menu!
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setFocusedIndex((prev) => (prev + 1) % menuItems.length);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setFocusedIndex((prev) => (prev - 1 + menuItems.length) % menuItems.length);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        sounds.playSelect();
-        menuItems[focusedIndex].action();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedIndex]);
 
   const handleMusicToggle = () => {
     sounds.playSelect();
@@ -258,7 +188,7 @@ export default function HeroSection({
       {/* 4. Main Central Row (Grid) */}
       <div className="relative z-20 grid grid-cols-1 lg:grid-cols-12 gap-8 my-auto pt-6 items-start">
         
-        {/* Left Column: Menu Items list (GTA V start menu style) */}
+        {/* Left Column: Player Hub Passports Panel (Premium, Ultra-clean, Non-redundant) */}
         <div className="lg:col-span-5 relative overflow-hidden rounded-2xl border border-white/10 p-6 bg-black/60 backdrop-blur-md shadow-2xl group transition-all duration-300 hover:border-pink-500/30 hover:shadow-[0_0_35px_rgba(236,72,153,0.25)]">
           
           {/* Subtle Pink/Cyan glowing overlays */}
@@ -268,61 +198,39 @@ export default function HeroSection({
           <div className="relative z-10 space-y-6">
             <div className="space-y-1">
               <span className="text-xs uppercase font-extrabold tracking-[0.25em] text-[#ec4899] font-mono flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> STAGE STARTING MENU
+                <Sparkles className="w-3.5 h-3.5" /> OFFICIAL REGISTRATION DESK
               </span>
               <h1 className="text-4xl sm:text-5xl font-black font-display tracking-tight text-white uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 PLAYFEST<span className="text-cyan-400 font-normal">2026</span>
               </h1>
             </div>
 
-            {/* Interactive Menu Options */}
-            <div 
-              className="space-y-2 border-l-2 border-white/5 pl-2 select-none"
-              onWheel={(e) => {
-                if (e.deltaY > 0) {
-                  setFocusedIndex((prev) => (prev + 1) % menuItems.length);
-                } else if (e.deltaY < 0) {
-                  setFocusedIndex((prev) => (prev - 1 + menuItems.length) % menuItems.length);
-                }
-              }}
-            >
-              {menuItems.map((item, index) => {
-                const isFocused = focusedIndex === index;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      sounds.playSelect();
-                      item.action();
-                    }}
-                    onMouseEnter={() => setFocusedIndex(index)}
-                    className={`w-full text-left py-3.5 px-4 rounded-lg font-display text-sm font-black tracking-widest uppercase transition-all duration-150 flex items-center justify-between border cursor-pointer ${
-                      isFocused
-                        ? 'bg-white text-black border-white translate-x-3 shadow-[0_0_20px_rgba(255,255,255,0.4)] font-extrabold relative z-10'
-                        : 'bg-black/40 hover:bg-black/60 text-gray-300 border-white/5 hover:text-white relative z-10'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      {isFocused && <ChevronRight className="w-4 h-4 text-[#ec4899] animate-pulse" />}
-                      {item.label}
-                    </span>
-                    {isFocused && (
-                      <span className="text-[10px] font-mono font-bold bg-[#ec4899]/10 text-[#ec4899] px-2 py-0.5 rounded border border-[#ec4899]/20 animate-pulse">
-                        SELECT
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <p className="text-sm text-gray-300 leading-relaxed font-light">
+              Welcome to Gaborone’s biggest digital and mechanical playground. Grab your free RSVP spot to participate in cash esport brackets, tuner showcase meets, and priority entry pass draws.
+            </p>
+
+            {/* Core Action Gateway: Simple, direct, beautifully polished */}
+            <div className="space-y-3.5">
+              <button
+                onClick={() => {
+                  sounds.playSelect();
+                  onRegisterClick();
+                }}
+                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-pink-500 via-purple-600 to-cyan-500 font-display font-black text-xs uppercase tracking-widest text-white shadow-[0_0_20px_rgba(236,72,153,0.3)] hover:shadow-[0_0_30px_rgba(236,72,153,0.55)] hover:scale-[1.01] transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-white animate-pulse" />
+                <span>SECURE FREE RSVP TICKET</span>
+                <ChevronRight className="w-4 h-4 text-white" />
+              </button>
             </div>
 
-            {/* Contextual Description Help Box */}
+            {/* Contextual Status Help Box */}
             <div className="bg-black/85 border-t-2 border-[#ec4899] p-4 font-mono text-[11px] text-gray-300 leading-relaxed rounded-b-lg shadow-2xl relative">
               <div className="absolute top-0 right-4 -translate-y-1/2 bg-[#ec4899] text-white text-[9px] font-bold px-2 py-0.5 rounded tracking-widest uppercase">
-                HELP COMPASS
+                GUEST PERK
               </div>
               <p className="text-gray-400">
-                {menuItems[focusedIndex].description}
+                🎁 COMPLETING RSVP AUTOMATICALLY ENTERS YOU INTO OUR VIP ENTRY DRAWINGS • 100% FREE INTRODUCTORY SLOTS
               </p>
             </div>
           </div>
@@ -461,17 +369,11 @@ export default function HeroSection({
           </div>
         </div>
 
-        {/* HUD Keybind Guide tips footer */}
+        {/* HUD Guide tips footer */}
         <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-3 border-t border-white/5 text-[10px] font-mono text-gray-500">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              <span className="px-1.5 py-0.5 rounded bg-white/10 text-white font-bold">↑↓ ARROWS</span> NAVIGATE
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="px-1.5 py-0.5 rounded bg-white/10 text-white font-bold">ENTER</span> SELECT
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="px-1.5 py-0.5 rounded bg-white/10 text-white font-bold">MOUSE</span> HOVER CHOOSE
+            <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
+              ● REAL-TIME METRIC TRANSMISSION IN PROGRESS
             </span>
           </div>
           <div>

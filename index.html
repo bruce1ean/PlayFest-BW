@@ -6,6 +6,28 @@
     <title>PlayFest 2026 - Botswana's Premier Automotive, Gaming & Music Festival</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=2" />
+    <script>
+      // Gracefully catch and silence benign Vite HMR/WebSocket errors, as HMR is disabled by the development platform.
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && (
+          event.reason.message === 'WebSocket closed without opened.' ||
+          (typeof event.reason.message === 'string' && event.reason.message.includes('WebSocket')) ||
+          (typeof event.reason === 'string' && event.reason.includes('WebSocket'))
+        )) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+      window.addEventListener('error', function(event) {
+        if (event.message && (
+          event.message.includes('WebSocket') || 
+          event.message.includes('websocket')
+        )) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
