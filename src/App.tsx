@@ -145,7 +145,7 @@ export default function App() {
       {/* Dynamic Background Stars Ambient Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />
       {/* Navigation Header Banner */}
-      <header className="relative w-full bg-[#05020c] border-b border-white/5">
+      <header className="relative w-full bg-black">
         <div className="relative w-full max-w-7xl mx-auto">
           <img 
             src={playfestLogo} 
