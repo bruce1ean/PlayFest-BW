@@ -202,6 +202,27 @@ export default function App() {
               </button>
             );
           })}
+
+          {/* Subtle separator */}
+          <div className="w-[1px] h-4 bg-white/10 hidden sm:block" />
+
+          {/* Cogwheel Admin/Organizer Settings Trigger */}
+          <button
+            onClick={() => {
+              storage.trackClick('btn-admin-gate-cog');
+              setViewState(viewState === 'admin' ? 'home' : 'admin');
+              sounds.playSelect();
+            }}
+            className={`p-1 rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center hover:scale-110 ${
+              viewState === 'admin' 
+                ? 'text-pink-500 bg-pink-500/10 shadow-[0_0_10px_rgba(236,72,153,0.3)]' 
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+            title="Organizer / Admin Console"
+            aria-label="Settings"
+          >
+            <Settings className={`w-4 h-4 transition-transform duration-500 ${viewState === 'admin' ? 'rotate-180 text-pink-500' : 'hover:rotate-90'}`} />
+          </button>
         </nav>
       </div>
 

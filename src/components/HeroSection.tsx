@@ -223,17 +223,6 @@ export default function HeroSection({
                 <span>SECURE FREE RSVP TICKET</span>
                 <ChevronRight className="w-4 h-4 text-white" />
               </button>
-
-              <button
-                onClick={() => {
-                  sounds.playSelect();
-                  if (onAdminClick) onAdminClick();
-                }}
-                className="w-full py-3 px-6 rounded-xl bg-white/5 border border-white/10 hover:border-purple-500/35 hover:bg-white/10 text-gray-400 hover:text-white font-display font-bold text-xs uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Lock className="w-3.5 h-3.5 text-gray-500" />
-                <span>ORGANIZER / ADMIN PORTAL</span>
-              </button>
             </div>
 
             {/* Contextual Status Help Box */}
