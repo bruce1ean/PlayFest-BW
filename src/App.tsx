@@ -146,11 +146,13 @@ export default function App() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />
       {/* Navigation Header Banner */}
       <header className="relative w-full bg-black">
-        <div className="relative w-full max-w-7xl mx-auto">
+        <div className="relative w-full max-w-7xl mx-auto aspect-[1376/768] bg-[#05020c]">
           <img 
             src={playfestLogo} 
             alt="PlayFest 2026 Botswana Banner" 
-            className="w-full h-auto object-contain select-none block"
+            width={1376}
+            height={768}
+            className="w-full h-full object-contain select-none block aspect-[1376/768]"
             referrerPolicy="no-referrer"
           />
 
