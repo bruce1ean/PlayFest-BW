@@ -140,7 +140,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative min-h-screen font-sans bg-[#05020c] text-white">
+    <div className="relative min-h-screen font-sans bg-[#05020c] text-white overflow-x-hidden">
       
       {/* Dynamic Background Stars Ambient Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />

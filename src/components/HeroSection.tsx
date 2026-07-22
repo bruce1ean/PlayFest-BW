@@ -133,29 +133,29 @@ export default function HeroSection({
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_120px_rgba(0,0,0,0.95)] z-10" />
 
       {/* 3. Top Bar HUD Panel */}
-      <div className="relative z-20 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4 font-mono text-[11px] tracking-wider text-gray-400">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#ec4899]/10 text-[#ec4899] border border-[#ec4899]/20 font-bold">
+      <div className="relative z-20 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4 font-mono text-[11px] tracking-wider text-gray-400">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#ec4899]/10 text-[#ec4899] border border-[#ec4899]/20 font-bold text-[10px] sm:text-[11px]">
             PLAYFEST MULTIPLAYER LOBBY
           </span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 text-[10px] sm:text-[11px]">
             <MapPin className="w-3.5 h-3.5 text-cyan-400" />
             GABORONE, BOTSWANA
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px] sm:text-[11px]">
           <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
             <Wifi className="w-3.5 h-3.5 animate-pulse" />
-            ONLINE [ACTIVE]
+            ONLINE
           </span>
-          <span className="text-gray-500">|</span>
+          <span className="text-gray-700 hidden sm:inline">|</span>
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-purple-400" />
             LOBBY: {systemTime}
           </span>
-          <span className="text-gray-500">|</span>
+          <span className="text-gray-700 hidden sm:inline">|</span>
           <span className="text-gray-300">PING: <span className="text-cyan-400 font-bold">{ping}ms</span></span>
-          <span className="text-gray-500">|</span>
+          <span className="text-gray-700 hidden sm:inline">|</span>
           
           {/* HIGH-FIDELITY LOBBY MUSIC CONTROLLER */}
           <button 
@@ -169,11 +169,6 @@ export default function HeroSection({
             {isMusicPlaying ? (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-[#ec4899] animate-pulse" />
-                <span className="flex items-end gap-0.5 h-2.5 mr-1">
-                  <span className="w-0.5 h-1.5 bg-[#ec4899] animate-[bounce_0.7s_infinite_100ms]" />
-                  <span className="w-0.5 h-2.5 bg-[#ec4899] animate-[bounce_0.7s_infinite_300ms]" />
-                  <span className="w-0.5 h-1 bg-[#ec4899] animate-[bounce_0.7s_infinite_500ms]" />
-                </span>
                 <span>SOUNDTRACK: ON</span>
               </>
             ) : (
