@@ -339,12 +339,12 @@ export const storage = {
   },
 
   // GET Registrations
-  async getRegistrations(): Promise<AttendeeRegistration[]> {
+  async getRegistrations(bypassCache = false): Promise<AttendeeRegistration[]> {
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
     let blended = [...local];
 
     try {
-      const response = await fetch('/api/registrations');
+      const response = await fetch(`/api/registrations${bypassCache ? '?bypassCache=true' : ''}`);
       if (response.ok) {
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {

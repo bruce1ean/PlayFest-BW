@@ -86,6 +86,13 @@ export default function App() {
     // Record visit analytics
     storage.trackVisit();
     syncServerStats();
+
+    // Set up rapid telemetry polling to keep live server stats updated (every 15s)
+    const intervalId = setInterval(() => {
+      syncServerStats();
+    }, 15000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleRegisterSuccess = (data: AttendeeRegistration) => {

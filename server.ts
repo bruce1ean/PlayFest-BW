@@ -12,6 +12,17 @@ import nodemailer from 'nodemailer';
 const app = express();
 const PORT = 3000;
 
+// In-memory cache to prevent slow Google Sheets API reads and make stats instant
+let registrationsCache: { registrations: any[]; timestamp: number } | null = null;
+let vendorsCache: { vendors: any[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15000; // 15 seconds cache TTL
+
+function invalidateSheetsCache() {
+  console.log('[Sheets Database] Invalidating registrations and vendors memory cache due to updates.');
+  registrationsCache = null;
+  vendorsCache = null;
+}
+
 // Express parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -26,9 +37,20 @@ function cleanSpreadsheetId(idOrUrl: string | undefined): string | undefined {
   return idOrUrl;
 }
 
+// Helper to clean private key, replacing escaped newlines and stripping wrapping quotes
+function cleanPrivateKey(rawKey: string | undefined): string {
+  if (!rawKey) return '';
+  let key = rawKey.replace(/\\n/g, '\n');
+  if (key.startsWith('"') && key.endsWith('"')) {
+    key = key.substring(1, key.length - 1);
+  }
+  return key;
+}
+
 // Google Sheets Primary Database API Endpoint
 app.post('/api/backup-registration', async (req, res) => {
   const payload = req.body;
+  invalidateSheetsCache();
 
   // Logging incoming backup payload
   console.log('[Sheets Database] Received save request for registration:', payload?.id);
@@ -74,6 +96,10 @@ app.post('/api/backup-registration', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          spreadsheetId,
+          spreadsheet_id: spreadsheetId,
+          sheetName,
+          sheet_name: sheetName,
           id: payload.id,
           fullName: payload.fullName,
           email: payload.email,
@@ -128,8 +154,8 @@ app.post('/api/backup-registration', async (req, res) => {
   }
 
   try {
-    // Correctly handle escaped newline characters in private key
-    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    // Correctly handle escaped newline characters and wrapping quotes in private key
+    const privateKey = cleanPrivateKey(rawPrivateKey);
 
     // Authenticate with Google API using JWT for Service Account
     const auth = new google.auth.JWT({
@@ -227,6 +253,7 @@ app.post('/api/backup-registration', async (req, res) => {
 // Google Sheets Vendors Backup API Endpoint
 app.post('/api/backup-vendor', async (req, res) => {
   const payload = req.body;
+  invalidateSheetsCache();
 
   // Logging incoming backup payload
   console.log('[Sheets Database] Received save request for vendor:', payload?.id);
@@ -272,7 +299,10 @@ app.post('/api/backup-vendor', async (req, res) => {
           ...payload,
           contactNumber: formattedContactNumber,
           isVendor: true,
-          sheetName
+          sheetName,
+          sheet_name: sheetName,
+          spreadsheetId,
+          spreadsheet_id: spreadsheetId
         }),
       });
 
@@ -318,7 +348,7 @@ app.post('/api/backup-vendor', async (req, res) => {
   }
 
   try {
-    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    const privateKey = cleanPrivateKey(rawPrivateKey);
 
     const auth = new google.auth.JWT({
       email: serviceAccountEmail,
@@ -896,6 +926,7 @@ app.post('/api/send-confirmation', async (req, res) => {
 
 app.post('/api/reset-registrations', async (req, res) => {
   console.log('[Sheets Database] Received request to reset all registrations.');
+  invalidateSheetsCache();
 
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -909,7 +940,7 @@ app.post('/api/reset-registrations', async (req, res) => {
   }
 
   try {
-    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    const privateKey = cleanPrivateKey(rawPrivateKey);
     const auth = new google.auth.JWT({
       email: serviceAccountEmail,
       key: privateKey,
@@ -948,6 +979,15 @@ app.post('/api/reset-registrations', async (req, res) => {
 
 // GET Registrations from Google Sheets (or fallback)
 app.get('/api/registrations', async (req, res) => {
+  const bypassCache = req.query.bypassCache === 'true';
+  if (!bypassCache && registrationsCache && (Date.now() - registrationsCache.timestamp < CACHE_TTL_MS)) {
+    console.log('[Sheets Database] Returning cached registrations list.');
+    return res.json({
+      success: true,
+      registrations: registrationsCache.registrations,
+    });
+  }
+
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -962,7 +1002,8 @@ app.get('/api/registrations', async (req, res) => {
         console.log('[Sheets Database] Note: GOOGLE_SHEETS_WEBAPP_URL contains a standard sheet URL instead of a web app /exec URL.');
       } else {
         console.log('[Sheets Database] WebApp URL configured. Fetching registrations via Apps Script Web App...');
-        const response = await fetch(webAppUrl, {
+        const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}spreadsheetId=${encodeURIComponent(spreadsheetId)}&spreadsheet_id=${encodeURIComponent(spreadsheetId)}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(fetchUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -983,6 +1024,10 @@ app.get('/api/registrations', async (req, res) => {
 
             if (data && data.success && Array.isArray(data.registrations)) {
               console.log(`[Sheets Database] Successfully fetched ${data.registrations.length} registrations via Apps Script Web App.`);
+              registrationsCache = {
+                registrations: data.registrations,
+                timestamp: Date.now()
+              };
               return res.json({
                 success: true,
                 registrations: data.registrations,
@@ -1002,7 +1047,7 @@ app.get('/api/registrations', async (req, res) => {
   }
 
   try {
-    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    const privateKey = cleanPrivateKey(rawPrivateKey);
     const auth = new google.auth.JWT({
       email: serviceAccountEmail,
       key: privateKey,
@@ -1072,6 +1117,11 @@ app.get('/api/registrations', async (req, res) => {
       };
     });
 
+    registrationsCache = {
+      registrations,
+      timestamp: Date.now()
+    };
+
     return res.json({
       success: true,
       registrations,
@@ -1089,6 +1139,15 @@ app.get('/api/registrations', async (req, res) => {
 
 // GET Vendors from Google Sheets (or fallback)
 app.get('/api/vendors', async (req, res) => {
+  const bypassCache = req.query.bypassCache === 'true';
+  if (!bypassCache && vendorsCache && (Date.now() - vendorsCache.timestamp < CACHE_TTL_MS)) {
+    console.log('[Sheets Database] Returning cached vendors list.');
+    return res.json({
+      success: true,
+      vendors: vendorsCache.vendors,
+    });
+  }
+
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -1100,7 +1159,8 @@ app.get('/api/vendors', async (req, res) => {
     try {
       if (!webAppUrl.includes('docs.google.com/spreadsheets')) {
         console.log('[Sheets Database] WebApp URL configured. Fetching vendors via Apps Script Web App...');
-        const response = await fetch(`${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}type=vendors`, {
+        const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}type=vendors&spreadsheetId=${encodeURIComponent(spreadsheetId)}&spreadsheet_id=${encodeURIComponent(spreadsheetId)}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(fetchUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -1118,6 +1178,10 @@ app.get('/api/vendors', async (req, res) => {
 
             if (data && data.success && Array.isArray(data.vendors)) {
               console.log(`[Sheets Database] Successfully fetched ${data.vendors.length} vendors via Apps Script Web App.`);
+              vendorsCache = {
+                vendors: data.vendors,
+                timestamp: Date.now()
+              };
               return res.json({
                 success: true,
                 vendors: data.vendors,
@@ -1137,7 +1201,7 @@ app.get('/api/vendors', async (req, res) => {
   }
 
   try {
-    const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+    const privateKey = cleanPrivateKey(rawPrivateKey);
     const auth = new google.auth.JWT({
       email: serviceAccountEmail,
       key: privateKey,
@@ -1189,6 +1253,11 @@ app.get('/api/vendors', async (req, res) => {
       };
     });
 
+    vendorsCache = {
+      vendors,
+      timestamp: Date.now()
+    };
+
     return res.json({
       success: true,
       vendors,
@@ -1201,6 +1270,110 @@ app.get('/api/vendors', async (req, res) => {
       error: error.message || error
     });
   }
+});
+
+// GET Google Sheets diagnostics/telemetry status
+app.get('/api/sheets-diagnostics', async (req, res) => {
+  const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+  const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+  const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = cleanSpreadsheetId(rawSpreadsheetId);
+  const sheetName = process.env.GOOGLE_SHEET_NAME || 'Attendees';
+  const vendorSheetName = process.env.GOOGLE_SHEET_VENDORS_NAME || 'Vendors';
+
+  const diagnostics: any = {
+    webAppUrlConfigured: !!webAppUrl,
+    serviceAccountConfigured: !!(serviceAccountEmail && rawPrivateKey && spreadsheetId),
+    spreadsheetId: spreadsheetId || null,
+    sheetName,
+    vendorSheetName,
+    status: 'UNKNOWN',
+    error: null,
+    details: {}
+  };
+
+  if (webAppUrl) {
+    diagnostics.status = 'USING_WEBAPP';
+    if (webAppUrl.includes('docs.google.com/spreadsheets')) {
+      diagnostics.status = 'ERROR';
+      diagnostics.error = 'GOOGLE_SHEETS_WEBAPP_URL is set to a normal Google Sheets URL instead of a deployed Google Apps Script /exec Web App URL.';
+    } else {
+      try {
+        const testUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}spreadsheetId=${encodeURIComponent(spreadsheetId || '')}&spreadsheet_id=${encodeURIComponent(spreadsheetId || '')}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(testUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (!response.ok) {
+          diagnostics.status = 'ERROR';
+          diagnostics.error = `Web App returned status ${response.status} when testing connection.`;
+        } else {
+          const text = await response.text();
+          if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            diagnostics.status = 'ERROR';
+            diagnostics.error = 'Web App returned an HTML page instead of JSON. Ensure your Google Apps Script is deployed with "Execute as: Me" and "Who has access: Anyone".';
+          } else {
+            const parsed = JSON.parse(text);
+            if (parsed.success === false) {
+              diagnostics.status = 'ERROR';
+              diagnostics.error = parsed.error || 'Web App returned success: false';
+            } else {
+              diagnostics.details = {
+                title: 'Google Apps Script Web App',
+                tabs: [sheetName, vendorSheetName],
+                message: 'Successfully reached Web App!',
+                registrationsCount: parsed.registrations ? parsed.registrations.length : 0,
+                vendorsCount: parsed.vendors ? parsed.vendors.length : 0
+              };
+            }
+          }
+        }
+      } catch (err: any) {
+        diagnostics.status = 'ERROR';
+        diagnostics.error = `Could not reach Web App: ${err.message || err}`;
+      }
+    }
+  } else if (serviceAccountEmail && rawPrivateKey && spreadsheetId) {
+    try {
+      const privateKey = cleanPrivateKey(rawPrivateKey);
+      const auth = new google.auth.JWT({
+        email: serviceAccountEmail,
+        key: privateKey,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+
+      const sheets = google.sheets({ version: 'v4', auth });
+      const sheetMeta = await sheets.spreadsheets.get({ spreadsheetId });
+
+      diagnostics.status = 'CONNECTED';
+      diagnostics.details = {
+        title: sheetMeta.data.properties?.title || 'Untitled Sheet',
+        tabs: sheetMeta.data.sheets?.map(s => s.properties?.title || '') || []
+      };
+
+      const tabs = diagnostics.details.tabs;
+      const attendeesExist = tabs.includes(sheetName);
+      const vendorsExist = tabs.includes(vendorSheetName);
+
+      if (!attendeesExist || !vendorsExist) {
+        diagnostics.status = 'WARNING';
+        const missing = [];
+        if (!attendeesExist) missing.push(`"${sheetName}"`);
+        if (!vendorsExist) missing.push(`"${vendorSheetName}"`);
+        diagnostics.error = `Connected successfully, but missing required tab(s): ${missing.join(', ')}. Please rename your Google Sheet tabs or check your GOOGLE_SHEET_NAME / GOOGLE_SHEET_VENDORS_NAME variables.`;
+      }
+    } catch (err: any) {
+      diagnostics.status = 'ERROR';
+      diagnostics.error = err.message || String(err);
+    }
+  } else {
+    diagnostics.status = 'SIMULATION_MODE';
+    diagnostics.error = 'No Google Sheets variables are configured. Saving only to local cache and Firestore replication.';
+  }
+
+  return res.json(diagnostics);
 });
 
 // Serve health status

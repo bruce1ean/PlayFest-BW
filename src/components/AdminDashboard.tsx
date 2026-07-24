@@ -38,6 +38,8 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ onClose, addToast }: AdminDashboardProps) {
   const [regs, setRegs] = useState<AttendeeRegistration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sheetsDiag, setSheetsDiag] = useState<any>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -62,17 +64,35 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated]);
 
   const loadData = async () => {
     try {
-      const allRegs = await storage.getRegistrations();
+      const allRegs = await storage.getRegistrations(true);
       setRegs(allRegs);
+      fetchDiagnostics();
     } catch (err) {
       addToast('Failed to load data', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDiagnostics = async () => {
+    setDiagLoading(true);
+    try {
+      const res = await fetch('/api/sheets-diagnostics');
+      if (res.ok) {
+        const data = await res.json();
+        setSheetsDiag(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load Google Sheets diagnostics', err);
+    } finally {
+      setDiagLoading(false);
     }
   };
 
@@ -359,6 +379,319 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
               <div className="text-xl sm:text-2xl font-black font-display text-white mt-0.5">{vipProspectsCount}</div>
             </div>
           </div>
+        </div>
+
+        {/* Google Sheets Bridge Diagnostics Panel */}
+        <div className="bg-black/40 border border-white/5 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-400 font-display">
+                  Google Sheets Integration Pipeline
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">Automated sheet replication & environment configuration audit.</p>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => { sounds.playSelect(); fetchDiagnostics(); }}
+              disabled={diagLoading}
+              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-bold font-mono uppercase tracking-wider text-gray-300 border border-white/5 flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${diagLoading ? 'animate-spin' : ''}`} />
+              {diagLoading ? 'Auditing...' : 'Test Connection'}
+            </button>
+          </div>
+
+          {!sheetsDiag ? (
+            <div className="text-sm text-gray-500 font-mono py-2">Loading pipeline telemetry...</div>
+          ) : (
+            <div className="space-y-4">
+              {/* Status Banner */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="col-span-1 bg-black/30 p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                  <span className="text-[10px] uppercase font-mono text-gray-500 tracking-wider font-bold">Pipeline Status</span>
+                  <div className="mt-2 flex items-center gap-2">
+                    {sheetsDiag.status === 'CONNECTED' && (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-sm font-black uppercase text-emerald-400 font-mono tracking-wider">ACTIVE & CONNECTED</span>
+                      </>
+                    )}
+                    {sheetsDiag.status === 'WARNING' && (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="text-sm font-black uppercase text-amber-400 font-mono tracking-wider">TAB MISMATCH WARNING</span>
+                      </>
+                    )}
+                    {sheetsDiag.status === 'ERROR' && (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                        <span className="text-sm font-black uppercase text-red-500 font-mono tracking-wider">AUTHENTICATION ERROR</span>
+                      </>
+                    )}
+                    {sheetsDiag.status === 'USING_WEBAPP' && (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                        <span className="text-sm font-black uppercase text-cyan-400 font-mono tracking-wider">USING APPS SCRIPT WEBAPP</span>
+                      </>
+                    )}
+                    {sheetsDiag.status === 'SIMULATION_MODE' && (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                        <span className="text-sm font-black uppercase text-purple-400 font-mono tracking-wider">SIMULATION FALLBACK</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="col-span-1 bg-black/30 p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                  <span className="text-[10px] uppercase font-mono text-gray-500 tracking-wider font-bold">Target Spreadsheet ID</span>
+                  <span className="mt-2 text-xs font-mono text-gray-300 truncate" title={sheetsDiag.spreadsheetId || 'None configured'}>
+                    {sheetsDiag.spreadsheetId ? `${sheetsDiag.spreadsheetId.substring(0, 8)}...${sheetsDiag.spreadsheetId.substring(sheetsDiag.spreadsheetId.length - 8)}` : 'N/A'}
+                  </span>
+                </div>
+
+                <div className="col-span-1 bg-black/30 p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                  <span className="text-[10px] uppercase font-mono text-gray-500 tracking-wider font-bold">Active Sheet Tabs</span>
+                  <div className="mt-2 flex gap-2 overflow-x-auto text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 text-gray-300">
+                      Attendees: "{sheetsDiag.sheetName}"
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 text-gray-300">
+                      Vendors: "{sheetsDiag.vendorSheetName}"
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Troubleshooting / Connected Details */}
+              {sheetsDiag.status === 'CONNECTED' && (
+                <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-emerald-300 text-xs flex flex-col gap-1 leading-relaxed">
+                  <div className="font-bold text-emerald-400">✓ Successfully synced with Google Sheet: "{sheetsDiag.details.title}"</div>
+                  <p className="opacity-95">All incoming registrations will be securely and instantly written directly to this live spreadsheet in real-time. Verified tab sheets: {sheetsDiag.details.tabs.join(', ')}.</p>
+                </div>
+              )}
+
+              {sheetsDiag.status === 'USING_WEBAPP' && (
+                <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/15 text-xs space-y-3 leading-relaxed">
+                  <div className="font-bold text-cyan-400 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" /> Google Sheets Apps Script Web App Active
+                  </div>
+                  {sheetsDiag.details && sheetsDiag.details.message ? (
+                    <div className="text-emerald-400 font-semibold mb-1">
+                      ✓ {sheetsDiag.details.message} (Found {sheetsDiag.details.registrationsCount} registrations & {sheetsDiag.details.vendorsCount} vendors in the synced database).
+                    </div>
+                  ) : (
+                    <div className="text-amber-400 font-semibold mb-1">
+                      ⚠️ Web App reached, but returned empty telemetry.
+                    </div>
+                  )}
+                  <p className="text-gray-300 opacity-95">
+                    Your registration pipeline is routing submissions through a high-speed Google Apps Script Web App bypass. This is highly reliable and does not require complex Google Cloud Service Accounts or API configurations.
+                  </p>
+                  
+                  <div className="border-t border-white/5 pt-3 mt-2 space-y-2">
+                    <p className="font-bold text-gray-200">Are registrations not appearing on your specific sheet?</p>
+                    <p className="text-gray-400 text-[11px]">
+                      The default Web App URL is a shared demo script. To capture registrations directly in <strong>your own Google Sheet</strong>, follow this simple 3-minute setup to deploy your own Apps Script:
+                    </p>
+                    
+                    <div className="bg-black/40 p-3.5 rounded-lg border border-white/5 text-[11px] text-gray-300 space-y-2.5">
+                      <div>
+                        <strong className="text-cyan-400 font-mono">Step 1: Create Your Google Sheet</strong>
+                        <p className="text-gray-400 pl-3">Create a new Google Sheet. Create two tabs and name them exactly <code className="text-white font-mono bg-white/5 px-1.5 py-0.5 rounded">Attendees</code> and <code className="text-white font-mono bg-white/5 px-1.5 py-0.5 rounded">Vendors</code>.</p>
+                      </div>
+                      <div>
+                        <strong className="text-cyan-400 font-mono">Step 2: Paste the Sync Script</strong>
+                        <p className="text-gray-400 pl-3">In your Google Sheet, click on <strong>Extensions &gt; Apps Script</strong>. Delete any code there, and paste the code below:</p>
+                        <div className="mt-2 relative">
+                          <pre className="p-2 bg-black/60 rounded border border-white/5 text-[9px] font-mono overflow-x-auto max-h-48 text-gray-400 select-all">
+{`function doGet(e) {
+  var params = e.parameter;
+  var spreadsheetId = params.spreadsheetId || params.spreadsheet_id;
+  var type = params.type;
+  
+  try {
+    var ss = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+    var sheetName = type === 'vendors' ? (params.sheetName || 'Vendors') : (params.sheetName || 'Attendees');
+    var sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: "Sheet tab '" + sheetName + "' not found. Please create it."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var rows = sheet.getDataRange().getValues();
+    if (rows.length <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        registrations: [],
+        vendors: []
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var headers = rows[0];
+    var data = [];
+    
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      var item = {};
+      for (var j = 0; j < headers.length; j++) {
+        var key = headers[j].toString().replace(/\\s+/g, '');
+        // simple mapping back to lowercase keys if needed
+        key = key.charAt(0).toLowerCase() + key.slice(1);
+        item[key] = row[j];
+      }
+      data.push(item);
+    }
+    
+    var response = { success: true };
+    if (type === 'vendors') {
+      response.vendors = data;
+    } else {
+      response.registrations = data;
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify(response))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.message
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var spreadsheetId = data.spreadsheetId || data.spreadsheet_id;
+    var ss = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+    
+    if (data.isVendor) {
+      var sheetName = data.sheetName || 'Vendors';
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+        sheet.appendRow([
+          'Business Name', 'Contact Person', 'Contact Number', 'Email', 
+          'Category', 'Products / Services', 'Social Media Links', 'Stall Size', 
+          'Electricity Required', 'Additional Requests', 'Timestamp', 'Vendor ID'
+        ]);
+      }
+      sheet.appendRow([
+        data.businessName, data.contactPerson, data.contactNumber, data.email,
+        data.category, data.productsOrServices, data.socialMediaLinks, data.stallSize,
+        data.electricityRequired, data.additionalRequests, data.createdAt || new Date().toISOString(), data.id
+      ]);
+    } else {
+      var sheetName = data.sheetName || 'Attendees';
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+        sheet.appendRow([
+          'Full Name', 'Email', 'Phone Number', 'Ticket Type', 
+          'Car Meet Registration', 'Timestamp', 'Registration ID'
+        ]);
+      }
+      sheet.appendRow([
+        data.fullName, data.email, data.phoneNumber, data.ticketType,
+        data.carRegistration, data.createdAt || new Date().toISOString(), data.id
+      ]);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                          </pre>
+                        </div>
+                      </div>
+                      <div>
+                        <strong className="text-cyan-400 font-mono">Step 3: Deploy as Web App</strong>
+                        <p className="text-gray-400 pl-3">
+                          Click <strong>Deploy &gt; New deployment</strong>. Select type <strong>Web app</strong>. Set "Execute as" to <strong>Me</strong> and "Who has access" to <strong>Anyone</strong> (this is crucial!). Click Deploy, copy the Web App URL, and save it in your AI Studio project Settings as the <strong>GOOGLE_SHEETS_WEBAPP_URL</strong> Secret.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {sheetsDiag.status === 'SIMULATION_MODE' && (
+                <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/10 text-xs space-y-2 leading-relaxed">
+                  <div className="font-bold text-purple-400 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" /> Real-time Google Sheet Connection is Inactive
+                  </div>
+                  <p className="text-gray-400 opacity-95">
+                    The registration system is currently running in a robust **local & Firestore simulated mode**. Data is successfully saved and read from local browsers and the Firestore replication pool, but is NOT writing to a live Google Sheet.
+                  </p>
+                  <p className="text-gray-400 text-[11px] border-t border-white/5 pt-2">
+                    <strong>To activate real Google Sheets storage, configure these Secrets in your AI Studio project Settings:</strong>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] font-mono">
+                    <div className="p-2 bg-black/20 rounded border border-white/5">
+                      <div className="text-purple-400 font-bold">GOOGLE_SPREADSHEET_ID</div>
+                      <span className="text-gray-500">Spreadsheet ID from Google Sheet URL</span>
+                    </div>
+                    <div className="p-2 bg-black/20 rounded border border-white/5">
+                      <div className="text-purple-400 font-bold">GOOGLE_SERVICE_ACCOUNT_EMAIL</div>
+                      <span className="text-gray-500">Service account email address</span>
+                    </div>
+                    <div className="p-2 bg-black/20 rounded border border-white/5">
+                      <div className="text-purple-400 font-bold">GOOGLE_PRIVATE_KEY</div>
+                      <span className="text-gray-500">The full private key string</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {sheetsDiag.status === 'WARNING' && (
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/15 text-xs space-y-2 leading-relaxed">
+                  <div className="font-bold text-amber-400">⚠️ Tab Sheet Mapping Error</div>
+                  <p className="text-gray-300 opacity-95">{sheetsDiag.error}</p>
+                  <p className="text-gray-400 text-[11px] border-t border-white/5 pt-2">
+                    <strong>Action Required:</strong> Open your Google Sheet spreadsheet and create/rename tabs to match <strong>"{sheetsDiag.sheetName}"</strong> (for attendees) and <strong>"{sheetsDiag.vendorSheetName}"</strong> (for vendors). Alternatively, configure the matching environment variables `GOOGLE_SHEET_NAME` and `GOOGLE_SHEET_VENDORS_NAME`.
+                  </p>
+                </div>
+              )}
+
+              {sheetsDiag.status === 'ERROR' && (
+                <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/15 text-xs space-y-3 leading-relaxed">
+                  <div className="font-bold text-red-400">✕ Pipeline Connection Failed</div>
+                  <div className="p-3 bg-black/30 rounded-lg border border-red-500/10 text-red-200 font-mono text-[11px] whitespace-pre-wrap break-all">
+                    {sheetsDiag.error}
+                  </div>
+                  <div className="text-gray-400 space-y-1.5 pt-1">
+                    <p className="font-bold text-gray-300">How to fix this issue:</p>
+                    <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+                      <li>
+                        <strong>Is it a 403 Forbidden / Permission Denied error?</strong>
+                        <p className="pl-4 text-gray-500 mt-0.5">You must share your Google Sheet spreadsheet with your Google Cloud service account email (as an <strong>Editor</strong>). You can retrieve your service account email from your Google Cloud Console or your secrets configuration.</p>
+                      </li>
+                      <li>
+                        <strong>Is it an "Invalid JWT Signature" or "key could not be parsed" error?</strong>
+                        <p className="pl-4 text-gray-500 mt-0.5">Your `GOOGLE_PRIVATE_KEY` secret is invalid. Verify that the key includes `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` and was copied entirely.</p>
+                      </li>
+                      <li>
+                        <strong>Is it a 404 / Requested entity was not found error?</strong>
+                        <p className="pl-4 text-gray-500 mt-0.5">Your `GOOGLE_SPREADSHEET_ID` is incorrect. Please ensure you copied only the spreadsheet ID, or the full correct URL.</p>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Database List HUD */}
