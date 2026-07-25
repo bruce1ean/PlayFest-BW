@@ -66,9 +66,9 @@ export default function App() {
       const allRegs = await storage.getRegistrations();
       
       
-      const citiesCount = new Set(allRegs.map((r) => r.city.toLowerCase())).size;
-      const gamersCount = allRegs.filter((r) => r.interests.includes('gaming')).length;
-      const carsCount = allRegs.filter((r) => r.interests.includes('car_meet')).length;
+      const citiesCount = new Set(allRegs.map((r) => (r.city || '').toLowerCase()).filter(Boolean)).size;
+      const gamersCount = allRegs.filter((r) => (r.interests || []).includes('gaming')).length;
+      const carsCount = allRegs.filter((r) => (r.interests || []).includes('car_meet')).length;
 
       setStats({
         total: allRegs.length,
@@ -273,6 +273,29 @@ export default function App() {
                     </div>
                   </div>
 
+                </div>
+
+                {/* Centered Glowing Settings Cogwheel in Footer */}
+                <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/5 flex justify-center">
+                  <button
+                    onClick={() => {
+                      storage.trackClick('btn-admin-gate-cog');
+                      setViewState(viewState === 'admin' ? 'home' : 'admin');
+                      sounds.playSelect();
+                    }}
+                    className="p-3 rounded-full bg-black/40 border border-white/10 transition-all duration-300 cursor-pointer flex items-center justify-center hover:scale-110 active:scale-95 hover:border-pink-500/50 group"
+                    style={{
+                      filter: 'drop-shadow(0 0 8px rgba(236, 72, 153, 0.4))',
+                    }}
+                    title="Organizer / Admin Console"
+                    aria-label="Settings"
+                  >
+                    <Settings 
+                      className={`w-5 h-5 text-[#ec4899] transition-transform duration-700 ${viewState === 'admin' ? 'rotate-180' : 'group-hover:rotate-90'}`}
+                      stroke="#ec4899"
+                      strokeWidth={2.2}
+                    />
+                  </button>
                 </div>
               </footer>
 

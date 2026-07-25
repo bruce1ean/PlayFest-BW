@@ -24,7 +24,9 @@ import {
   Mail,
   Eye,
   Lock,
-  EyeOff
+  EyeOff,
+  Clock,
+  Info
 } from 'lucide-react';
 import { AttendeeRegistration } from '../types';
 import { storage } from '../lib/storage';
@@ -44,6 +46,38 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   const [isResetting, setIsResetting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Real-time Countdown Timer target: Nov 21, 2026
+  const targetDate = new Date('2026-11-21T12:00:00+02:00').getTime();
+  const [timeLeft, setTimeLeft] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  });
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date().getTime();
+      const distance = targetDate - now;
+
+      if (distance < 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+      setTimeLeft({ days, hours, minutes, seconds });
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Admin authentication state
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -53,7 +87,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playSelect();
-    if (passwordInput === 'Tomcruise@16') {
+    if (passwordInput.trim() === 'Tomcruise@16') {
       setIsAuthenticated(true);
       setAuthError(false);
       addToast('Authorized access granted. Decrypting telemetry...', 'success');
@@ -88,9 +122,30 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
       if (res.ok) {
         const data = await res.json();
         setSheetsDiag(data);
+      } else {
+        setSheetsDiag({
+          webAppUrlConfigured: false,
+          serviceAccountConfigured: false,
+          spreadsheetId: null,
+          sheetName: 'Attendees',
+          vendorSheetName: 'Vendors',
+          status: 'OFFLINE_FALLBACK',
+          error: `API responded with HTTP status ${res.status}`,
+          details: {}
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load Google Sheets diagnostics', err);
+      setSheetsDiag({
+        webAppUrlConfigured: false,
+        serviceAccountConfigured: false,
+        spreadsheetId: null,
+        sheetName: 'Attendees',
+        vendorSheetName: 'Vendors',
+        status: 'OFFLINE_FALLBACK',
+        error: err?.message || String(err),
+        details: {}
+      });
     } finally {
       setDiagLoading(false);
     }
@@ -191,10 +246,10 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
     sounds.playSelect();
     setIsResetting(true);
     try {
-      localStorage.removeItem('playfest_registrations');
+      await storage.resetRegistrations();
       setRegs([]);
       setShowResetConfirm(false);
-      addToast('All registrations deleted locally.', 'success');
+      addToast('All registrations permanently deleted from cloud and local storage.', 'success');
     } catch (err) {
       addToast('Error resetting data.', 'error');
     } finally {
@@ -211,8 +266,8 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   };
 
   // Derive stats for deep telemetry summaries
-  const carShowcaseCount = regs.filter(r => r.interests.includes('car_meet')).length;
-  const gamingChallengersCount = regs.filter(r => r.interests.includes('gaming') && r.gamingDetails?.participateInTournaments === 'Yes').length;
+  const carShowcaseCount = regs.filter(r => (r.interests || []).includes('car_meet')).length;
+  const gamingChallengersCount = regs.filter(r => (r.interests || []).includes('gaming') && r.gamingDetails?.participateInTournaments === 'Yes').length;
   const vipProspectsCount = regs.filter(r => r.vipInterest === 'Yes').length;
 
   if (!isAuthenticated) {
@@ -335,6 +390,58 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Back to App
             </button>
+          </div>
+        </div>
+
+        {/* LAUNCH SEQUENCE COUNTDOWN HUD */}
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 hover:border-pink-500/15 transition-all shadow-xl">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#ec4899]/5 blur-3xl pointer-events-none rounded-full" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/5 blur-3xl pointer-events-none rounded-full" />
+          
+          <div className="space-y-1.5 text-center md:text-left z-10">
+            <div className="flex items-center justify-center md:justify-start gap-2">
+              <Clock className="w-4 h-4 text-[#ec4899] animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-widest text-pink-400 font-mono">
+                LAUNCH SEQUENCE COUNTDOWN
+              </span>
+            </div>
+            <h3 className="text-base font-black font-display uppercase tracking-wider text-white">
+              PLAYFEST 2026 GABORONE
+            </h3>
+            <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest flex items-center justify-center md:justify-start gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+              NOVEMBER 21, 2026 @ 12:00 CAT
+            </p>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3 font-mono min-w-[280px] sm:min-w-[340px] z-10">
+            <div className="text-center p-2.5 rounded-xl bg-black/50 border border-white/5 min-w-[65px]">
+              <div className="text-xl sm:text-2xl font-black text-[#ec4899] font-mono">
+                {String(timeLeft.days).padStart(2, '0')}
+              </div>
+              <div className="text-[8px] text-gray-500 uppercase tracking-widest font-bold mt-1">Days</div>
+            </div>
+            
+            <div className="text-center p-2.5 rounded-xl bg-black/50 border border-white/5 min-w-[65px]">
+              <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono">
+                {String(timeLeft.hours).padStart(2, '0')}
+              </div>
+              <div className="text-[8px] text-gray-500 uppercase tracking-widest font-bold mt-1">Hours</div>
+            </div>
+            
+            <div className="text-center p-2.5 rounded-xl bg-black/50 border border-white/5 min-w-[65px]">
+              <div className="text-xl sm:text-2xl font-black text-purple-400 font-mono">
+                {String(timeLeft.minutes).padStart(2, '0')}
+              </div>
+              <div className="text-[8px] text-gray-500 uppercase tracking-widest font-bold mt-1">Mins</div>
+            </div>
+            
+            <div className="text-center p-2.5 rounded-xl bg-black/50 border border-white/5 min-w-[65px]">
+              <div className="text-xl sm:text-2xl font-black text-rose-500 font-mono animate-pulse">
+                {String(timeLeft.seconds).padStart(2, '0')}
+              </div>
+              <div className="text-[8px] text-gray-500 uppercase tracking-widest font-bold mt-1">Secs</div>
+            </div>
           </div>
         </div>
 
@@ -886,7 +993,7 @@ function doPost(e) {
 
                                   {/* Column 3: Interest Specific Dossier (Esports Arena OR Garage Staging) */}
                                   <div className="space-y-4 lg:col-span-1 md:col-span-2">
-                                    {r.interests.includes('gaming') && r.gamingDetails && (
+                                    {(r.interests || []).includes('gaming') && r.gamingDetails && (
                                       <div className="p-4 rounded-xl bg-[#0b0819] border border-cyan-500/20 space-y-3">
                                         <h4 className="text-xs font-bold font-display uppercase tracking-wider text-cyan-400 flex items-center gap-2 border-b border-cyan-500/10 pb-2">
                                           <Gamepad2 className="w-3.5 h-3.5" /> 3a. Esports Battle Station
@@ -927,7 +1034,7 @@ function doPost(e) {
                                       </div>
                                     )}
 
-                                    {r.interests.includes('car_meet') && r.carDetails && (
+                                    {(r.interests || []).includes('car_meet') && r.carDetails && (
                                       <div className="p-4 rounded-xl bg-[#110714] border border-pink-500/20 space-y-3">
                                         <h4 className="text-xs font-bold font-display uppercase tracking-wider text-pink-400 flex items-center gap-2 border-b border-pink-500/10 pb-2">
                                           <Car className="w-3.5 h-3.5" /> 3b. Tuner Showcase Staging
@@ -981,7 +1088,7 @@ function doPost(e) {
                                     )}
 
                                     {/* Safeguard if neither of the conditional modules are chosen */}
-                                    {!r.interests.includes('gaming') && !r.interests.includes('car_meet') && (
+                                    {!(r.interests || []).includes('gaming') && !(r.interests || []).includes('car_meet') && (
                                       <div className="p-8 rounded-xl bg-black/30 border border-white/5 text-center text-gray-500 text-xs italic flex flex-col items-center justify-center gap-2 h-full">
                                         <Sparkles className="w-6 h-6 text-gray-600 animate-pulse" />
                                         <span>General Enthusiast RSVP — No specific Car Showcase or Esports Arena credentials requested.</span>
