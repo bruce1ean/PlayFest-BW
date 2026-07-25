@@ -151,92 +151,37 @@ export default function App() {
       
       {/* Dynamic Background Stars Ambient Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#201438,transparent_55%)] pointer-events-none z-0" />
-      {/* Navigation Header Banner */}
-      <header className="relative w-full bg-black">
-        <div className="relative w-full max-w-7xl mx-auto aspect-[1376/768] bg-[#05020c]">
+      {/* Navigation Header Banner & Merged Navigation */}
+      <header className="relative w-full bg-[#05020c] flex flex-col items-center overflow-hidden">
+        {/* Continuous background glow sitting behind both the image banner bottom and navigation menu to blend them as one */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-[radial-gradient(ellipse_at_center,rgba(236,72,153,0.12),transparent_70%)] pointer-events-none z-0" />
+
+        <div className="relative w-full max-w-7xl mx-auto aspect-[1376/768] bg-transparent overflow-hidden z-10">
           <img 
             src={playfestLogo} 
             alt="PlayFest 2026 Botswana Banner" 
             width={1376}
             height={768}
-            className="w-full h-full object-contain select-none block aspect-[1376/768]"
+            className="w-full h-full object-cover select-none block"
             referrerPolicy="no-referrer"
           />
 
-          {/* Invisible floating settings button precisely overlaying the gear icon in the image */}
+          {/* Transparent floating settings button precisely overlaying the gear icon in the image */}
           <button
             onClick={() => {
               storage.trackClick('btn-admin-gate');
               setViewState(viewState === 'admin' ? 'home' : 'admin');
               sounds.playSelect();
             }}
-            className="absolute top-[3%] right-[3%] w-[12%] aspect-square cursor-pointer z-50 bg-transparent border-none outline-none opacity-0"
+            className="absolute top-[4.5%] right-[3%] w-[7.5%] h-[13.5%] cursor-pointer z-50 rounded-[18%] border border-transparent hover:border-pink-500/50 hover:bg-pink-500/15 hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] transition-all duration-300"
             title="Organizer Console"
             aria-label="Settings"
           />
         </div>
       </header>
 
-      {/* Premium Glassmorphic Navbar Strip below the header */}
-      <div className="w-full bg-[#050509]/95 backdrop-blur-md border-b border-white/5 py-4 px-6 z-30 relative">
-        <nav className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-4 sm:gap-10 text-xs font-semibold uppercase tracking-widest text-gray-400">
-          {[
-            { id: 'home', label: 'Home' },
-            { id: 'register', label: 'RSVP Ticket' },
-            { id: 'feedback', label: 'Speak Your Mind' }
-          ].map((tab) => {
-            const isActive = viewState === (tab.id as any);
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  if (tab.id === 'home') navigateToHome();
-                  else if (tab.id === 'register') navigateToRegister();
-                  else if (tab.id === 'feedback') navigateToFeedback();
-                }}
-                className={`relative pb-2 cursor-pointer bg-transparent border-0 outline-none transition-colors duration-300 uppercase tracking-widest text-xs font-bold ${
-                  isActive 
-                    ? 'text-pink-500 text-shadow-[0_0_10px_rgba(236,72,153,0.5)]' 
-                    : 'text-gray-400 hover:text-white hover:text-shadow-[0_0_8px_rgba(255,255,255,0.4)]'
-                }`}
-              >
-                {tab.label}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeHeaderTab"
-                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-pink-500 to-purple-600 shadow-[0_0_8px_rgba(236,72,153,0.8)]"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
-              </button>
-            );
-          })}
-
-          {/* Subtle separator */}
-          <div className="w-[1px] h-4 bg-white/10 hidden sm:block" />
-
-          {/* Cogwheel Admin/Organizer Settings Trigger */}
-          <button
-            onClick={() => {
-              storage.trackClick('btn-admin-gate-cog');
-              setViewState(viewState === 'admin' ? 'home' : 'admin');
-              sounds.playSelect();
-            }}
-            className={`p-1 rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center hover:scale-110 ${
-              viewState === 'admin' 
-                ? 'text-pink-500 bg-pink-500/10 shadow-[0_0_10px_rgba(236,72,153,0.3)]' 
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-            title="Organizer / Admin Console"
-            aria-label="Settings"
-          >
-            <Settings className={`w-4 h-4 transition-transform duration-500 ${viewState === 'admin' ? 'rotate-180 text-pink-500' : 'hover:rotate-90'}`} />
-          </button>
-        </nav>
-      </div>
-
       {/* Primary Dynamic Main Body Switch */}
-      <main className="relative z-10 pt-4">
+      <main className="relative z-10 pt-0">
         <AnimatePresence mode="wait">
           
           {/* VIEW: ADMIN ORGANIZER CONSOLE */}
@@ -265,7 +210,6 @@ export default function App() {
               transition={{ duration: 0.4 }}
             >
               <SuccessPage
-                
                 registeredDetails={lastSubmissionDetails}
                 onBackToHome={() => setViewState('home')}
                 addToast={addToast}
@@ -273,37 +217,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* VIEW: STANDALONE REGISTER STEP FORM */}
-          {viewState === 'register' && (
-            <motion.div
-              key="register-portal-view"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-            >
-              <RegistrationForm 
-                onSuccess={handleRegisterSuccess}
-                addToast={addToast}
-              />
-
-              {/* FAQs directly on RSVP view for seamless reassurance */}
-              <TestimonialsFAQ />
-
-              {/* Footer Block */}
-              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
-                  <div>© {new Date().getFullYear()} PlayFest Botswana. Standalone Form.</div>
-                  <div className="flex gap-4">
-                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
-                    <a href="#" className="hover:text-pink-500">TikTok</a>
-                  </div>
-                </div>
-              </footer>
-            </motion.div>
-          )}
-
-          {/* VIEW: REGULAR LANDING PAGE VIEW */}
+          {/* VIEW: REGULAR LANDING PAGE VIEW (DIRECT REGISTRATION FORM ONLY) */}
           {viewState === 'home' && (
             <motion.div
               key="main-landing-view"
@@ -312,35 +226,21 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              {/* 1. Hero Block */}
-              <HeroSection 
-                onRegisterClick={navigateToRegister}
-                onPartnerClick={navigateToRegister}
-                onFeedbackClick={navigateToFeedback}
-                onAdminClick={() => {
-                  storage.trackClick('btn-admin-gate');
-                  setViewState('admin');
-                }}
-                stats={stats}
+              {/* Direct Registration Form */}
+              <RegistrationForm 
+                onSuccess={handleRegisterSuccess}
+                addToast={addToast}
               />
 
-              {/* 2. Why Register */}
-              <WhyRegister />
-
-              {/* 3. Attractions Showcase */}
-              <FestivalAttractions />
-
-              {/* 4. FAQs Section */}
+              {/* Trust/FAQ section */}
               <TestimonialsFAQ />
 
-
-
               {/* Footer Block */}
-              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 relative z-10 text-gray-400">
-                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-10">
+              <footer className="py-12 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 relative z-10 text-gray-400">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-8 items-start">
                   
                   {/* Left Column LOGO brand statement */}
-                  <div className="space-y-4">
+                  <div className="space-y-3 max-w-md">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold font-display">P</div>
                       <span className="font-display font-black text-lg tracking-wider text-white uppercase">PLAYFEST 2026</span>
@@ -353,82 +253,29 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Right column quick newsletter */}
-                  <div className="space-y-4 md:col-span-2 flex flex-col md:items-end justify-between">
-                    <div className="w-full max-w-sm">
-                      <h5 className="text-xs uppercase font-extrabold text-white tracking-widest mb-2 font-mono">
-                        Stay Tuned via priority feed
-                      </h5>
-                      <p className="text-[11px] text-gray-500 mb-4">
-                        Join the email queue for Gaborone staging releases and tournament updates. No spam.
-                      </p>
-                      
-                      <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
-                        <input
-                          required
-                          type="email"
-                          value={newsletterEmail}
-                          onChange={(e) => setNewsletterEmail(e.target.value)}
-                          placeholder="Your active email"
-                          className="flex-1 px-3.5 py-2.5 rounded-lg bg-black/60 border border-white/5 focus:border-pink-500 focus:outline-none text-xs text-white"
-                        />
-                        <button
-                          type="submit"
-                          disabled={subscribingNews}
-                          className="px-5 rounded-lg bg-purple-600 text-white font-display font-bold text-xs uppercase hover:bg-purple-500 cursor-pointer transition-colors disabled:opacity-50"
-                        >
-                          {subscribingNews ? 'QUEUEING...' : 'SIGNUP'}
-                        </button>
-                      </form>
+                  {/* Right column quick links & socials */}
+                  <div className="space-y-4 flex flex-col items-start md:items-end w-full md:w-auto">
+                    <div className="flex flex-wrap gap-4 sm:gap-6 text-xs font-mono">
+                      <a href="#" className="hover:text-pink-500/85 transition-colors">TikTok</a>
+                      <a 
+                        href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="hover:text-pink-500/85 transition-colors"
+                      >
+                        Instagram
+                      </a>
+                      <a href="#" className="hover:text-pink-500/85 transition-colors">Facebook</a>
+                      <a href="#" className="hover:text-pink-500/85 transition-colors">WhatsApp</a>
                     </div>
-
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 text-[11px] text-gray-600 pt-6 font-mono md:text-right w-full justify-between items-center md:justify-end">
-                      <div className="flex gap-4">
-                        <a href="#" className="hover:text-pink-500/85">TikTok</a>
-                        <a 
-                          href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="hover:text-pink-500/85"
-                        >
-                          Instagram
-                        </a>
-                        <a href="#" className="hover:text-pink-500/85">Facebook</a>
-                        <a href="#" className="hover:text-pink-500/85">WhatsApp</a>
-                      </div>
-                      <div className="text-gray-600">
-                        © {new Date().getFullYear()} PlayFest 2026 Botswana. All Rights Reserved. • Designed Mobile-First
-                      </div>
+                    <div className="text-[11px] text-gray-600 font-mono text-left md:text-right">
+                      © {new Date().getFullYear()} PlayFest 2026 Botswana. All Rights Reserved. • Designed Mobile-First
                     </div>
                   </div>
 
                 </div>
               </footer>
 
-            </motion.div>
-          )}
-
-          {/* VIEW: SPEAK YOUR MIND (CONCEPT FEEDBACK BOARD) */}
-          {viewState === 'feedback' && (
-            <motion.div
-              key="feedback-portal-view"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-            >
-              <ConceptFeedbackBoard addToast={addToast} />
-
-              {/* Footer Block */}
-              <footer className="py-16 px-6 sm:px-12 bg-[#04020a] border-t border-white/5 text-gray-400">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono">
-                  <div>© {new Date().getFullYear()} PlayFest Botswana. Speak Your Mind.</div>
-                  <div className="flex gap-4">
-                    <a href="https://www.instagram.com/playfestbw?igsh=MTVtc2QxODV2d3FlNQ%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer" className="hover:text-pink-500">Instagram</a>
-                    <a href="#" className="hover:text-pink-500">TikTok</a>
-                  </div>
-                </div>
-              </footer>
             </motion.div>
           )}
 

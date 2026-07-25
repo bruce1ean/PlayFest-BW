@@ -115,7 +115,7 @@ export default function HeroSection({
   };
 
   return (
-    <section className="relative min-h-screen flex flex-col justify-between pt-24 pb-6 px-4 sm:px-12 overflow-hidden bg-[#030107]">
+    <section className="relative min-h-screen flex flex-col justify-between pt-2 pb-6 px-4 sm:px-12 overflow-hidden bg-[#05020c]">
       
       {/* 1. Full-screen ambient cyber gradient glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -125,8 +125,8 @@ export default function HeroSection({
       </div>
       
       {/* Gradients to blend text & layout seamlessly with perfect legibility */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-[#030107]/50 z-10" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#030107] via-black/10 to-black/60 z-10" />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-[#05020c]/50 z-10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#05020c] via-black/10 to-black/60 z-10" />
       
       {/* Retro scanline & noise textures */}
       <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.2)_50%)] bg-[length:100%_4px] opacity-15 z-10" />
