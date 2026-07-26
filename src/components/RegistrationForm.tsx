@@ -103,13 +103,14 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
     const fallbackPassword = 'playfest2026';
 
     try {
-      // 1. Attempt Firebase Auth registration in background
-      try {
-        await registerUser(email.trim(), fallbackPassword);
-      } catch (authErr: any) {
-        // If account already exists or provider is disabled, print to devlog & proceed in Guest Fallback Mode
-        console.log('Firebase Auth helper skipped/fallback:', authErr.code || authErr);
-      }
+      // 1. Attempt Firebase Auth registration in background (non-blocking)
+      registerUser(email.trim(), fallbackPassword)
+        .then((userCred) => {
+          console.log('Firebase Auth background registration succeeded:', userCred.user?.uid);
+        })
+        .catch((authErr) => {
+          console.log('Firebase Auth helper skipped/fallback:', authErr.code || authErr);
+        });
 
       // Map interests
       const interestsToSend = passions.length > 0 ? passions : ['General Interest'];

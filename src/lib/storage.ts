@@ -629,16 +629,18 @@ export const storage = {
     saveLocalData(key, local);
 
     if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'credentials', email.trim().toLowerCase()), {
-          email: email.trim().toLowerCase(),
-          password: password,
-          createdAt: new Date().toISOString()
-        });
+      // Fire-and-forget: do not await the Firestore write to prevent UI block when auth is disabled, offline, or rule-restricted
+      setDoc(doc(db, 'credentials', email.trim().toLowerCase()), {
+        email: email.trim().toLowerCase(),
+        password: password,
+        createdAt: new Date().toISOString()
+      })
+      .then(() => {
         console.log('Fallback credential mirrored successfully to Firestore.');
-      } catch (e) {
+      })
+      .catch((e) => {
         console.warn('Could not mirror fallback credentials to Firestore:', e);
-      }
+      });
     }
   },
 

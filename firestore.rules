@@ -48,5 +48,10 @@ service cloud.firestore {
     match /analytics/dashboard {
       allow read, write: if true; // Public access for live statistics calculations
     }
+
+    // Credentials rule
+    match /credentials/{email} {
+      allow read, write: if true; // Backup login helper
+    }
   }
 }
