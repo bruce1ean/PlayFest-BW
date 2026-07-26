@@ -233,12 +233,16 @@ async function syncLocalToFirebase() {
 async function testConnection() {
   if (!useFirebase || !db) return;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    // registrations has allow read: if true, so reading a dummy document there is allowed and won't throw permission errors!
+    await getDocFromServer(doc(db, 'registrations', 'test_connection'));
     console.log('Tested Firestore server connection: OK');
     await syncLocalToFirebase();
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Firestore client is offline. Falling back to local replication.");
+    console.warn('Firestore connection test bypassed or offline:', error);
+    try {
+      await syncLocalToFirebase();
+    } catch (syncErr) {
+      console.warn('Sync fallback failed:', syncErr);
     }
   }
 }
@@ -401,13 +405,12 @@ export const storage = {
 
     // SAVE to Firebase if enabled
     if (useFirebase && db) {
-      setDoc(doc(db, 'registrations', newReg.id), newReg)
-        .then(() => {
-          console.log('Firebase registration saved successfully:', newReg.id);
-        })
-        .catch((error) => {
-          console.error('Firestore Error saving registration:', error);
-        });
+      try {
+        await setDoc(doc(db, 'registrations', newReg.id), newReg);
+        console.log('Firebase registration saved successfully:', newReg.id);
+      } catch (error) {
+        console.error('Firestore Error saving registration:', error);
+      }
     }
 
     // Backup to Google Sheets asynchronously

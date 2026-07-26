@@ -31,6 +31,7 @@ import {
 import { AttendeeRegistration } from '../types';
 import { storage } from '../lib/storage';
 import { sounds } from '../lib/sounds';
+import DashboardCharts from './DashboardCharts';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -373,6 +374,18 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <button 
+              onClick={async () => {
+                sounds.playSelect();
+                setLoading(true);
+                await loadData();
+                addToast('Telemetry and registrations refreshed successfully!', 'success');
+              }}
+              disabled={loading}
+              className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-bold font-display uppercase text-cyan-400 flex items-center justify-center gap-1.5 border border-cyan-500/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Syncing...' : 'Refresh Telemetry'}
+            </button>
+            <button 
               onClick={handleExportCSV} 
               className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-xs font-bold font-display uppercase text-pink-400 flex items-center justify-center gap-1.5 border border-pink-500/20 transition-all active:scale-95 cursor-pointer"
             >
@@ -487,6 +500,9 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
             </div>
           </div>
         </div>
+
+        {/* Analytics & Interest Visualizations */}
+        <DashboardCharts regs={regs} />
 
         {/* Google Sheets Bridge Diagnostics Panel */}
         <div className="bg-black/40 border border-white/5 rounded-2xl p-6 shadow-xl relative overflow-hidden">
@@ -810,8 +826,20 @@ function doPost(e) {
               </h3>
               <p className="text-xs text-gray-400 mt-1">Click on any registrant row to unpack their complete multidimensional dossier.</p>
             </div>
-            <div className="text-[10px] font-mono text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
-              DATABASE COUNTER: {regs.length} RECORDS
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <button
+                onClick={() => {
+                  sounds.playSelect();
+                  handleExportCSV();
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-[10px] font-bold font-mono uppercase text-pink-400 flex items-center gap-1.5 border border-pink-500/25 transition-all active:scale-95 cursor-pointer"
+                title="Download attendee list for offline management as CSV"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" /> Download CSV
+              </button>
+              <div className="text-[10px] font-mono text-gray-400 bg-white/5 px-2.5 py-1.5 rounded-md border border-white/5">
+                DATABASE COUNTER: {regs.length} RECORDS
+              </div>
             </div>
           </div>
 
@@ -1105,10 +1133,97 @@ function doPost(e) {
                   })}
                   {regs.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center text-gray-500">
-                        <Users className="w-8 h-8 opacity-40 mx-auto mb-2 text-gray-500 animate-pulse" />
-                        <p className="font-mono text-xs uppercase tracking-widest">Dossier terminal offline</p>
-                        <p className="text-xs text-gray-600 mt-1">No registrant entries saved in active cache.</p>
+                      <td colSpan={5} className="p-8 sm:p-12 text-center">
+                        <div className="max-w-md mx-auto flex flex-col items-center">
+                          {/* Beautiful Custom Cyberpunk SVG Illustration */}
+                          <div className="relative mb-6">
+                            {/* Outer ambient glow */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 blur-xl rounded-full opacity-60 animate-pulse" />
+                            
+                            <svg className="w-56 h-36 relative z-10" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              {/* Glowing grid floor */}
+                              <path d="M10 110 H190 M30 110 L50 80 M170 110 L150 80 M100 110 V80" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+                              <ellipse cx="100" cy="100" rx="80" ry="12" fill="rgba(34,211,238,0.02)" />
+                              
+                              {/* Connection Circuit Nodes */}
+                              <path d="M15 65 H45 L55 75" stroke="url(#cyan-glow)" strokeWidth="1.5" strokeDasharray="3 3" />
+                              <circle cx="15" cy="65" r="2.5" fill="#22d3ee" className="animate-ping" />
+                              <path d="M185 65 H155 L145 75" stroke="url(#pink-glow)" strokeWidth="1.5" strokeDasharray="3 3" />
+                              <circle cx="185" cy="65" r="2.5" fill="#ec4899" className="animate-ping" />
+
+                              {/* Game Controller Floating Core */}
+                              <rect x="75" y="25" width="50" height="30" rx="15" fill="#0b0819" stroke="url(#cyber-grad)" strokeWidth="2" />
+                              {/* D-Pad */}
+                              <path d="M85 40 H93 M89 36 V44" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" />
+                              {/* Buttons */}
+                              <circle cx="111" cy="37" r="1.5" fill="#ec4899" />
+                              <circle cx="116" cy="40" r="1.5" fill="#a855f7" />
+                              <circle cx="111" cy="43" r="1.5" fill="#eab308" />
+
+                              {/* Sleek Sports Car Chassis Silhouette */}
+                              <path d="M55 85 L65 72 C70 69, 130 69, 135 72 L145 85 C150 88, 145 92, 135 92 H65 C55 92, 50 88, 55 85 Z" fill="rgba(236,72,153,0.08)" stroke="url(#pink-glow)" strokeWidth="1.5" />
+                              {/* Headlights / Taillights glows */}
+                              <path d="M53 85 H56" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M144 85 H147" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" />
+                              
+                              {/* Wheels with spinner details */}
+                              <circle cx="72" cy="92" r="8" fill="#0b0819" stroke="#22d3ee" strokeWidth="1.5" />
+                              <circle cx="72" cy="92" r="3" fill="#ec4899" />
+                              <circle cx="128" cy="92" r="8" fill="#0b0819" stroke="#22d3ee" strokeWidth="1.5" />
+                              <circle cx="128" cy="92" r="3" fill="#ec4899" />
+
+                              {/* Rising Sparkle Stars */}
+                              <path d="M100 12 L102 16 L106 17 L102 18 L100 22 L98 18 L94 17 L98 16 Z" fill="#eab308" className="animate-bounce" />
+
+                              <defs>
+                                <linearGradient id="cyber-grad" x1="75" y1="25" x2="125" y2="55" gradientUnits="userSpaceOnUse">
+                                  <stop stopColor="#22d3ee" />
+                                  <stop offset="0.5" stopColor="#a855f7" />
+                                  <stop offset="1" stopColor="#ec4899" />
+                                </linearGradient>
+                                <linearGradient id="cyan-glow" x1="15" y1="65" x2="55" y2="75" gradientUnits="userSpaceOnUse">
+                                  <stop stopColor="#22d3ee" />
+                                  <stop offset="1" stopColor="rgba(34,211,238,0)" />
+                                </linearGradient>
+                                <linearGradient id="pink-glow" x1="185" y1="65" x2="145" y2="75" gradientUnits="userSpaceOnUse">
+                                  <stop stopColor="#ec4899" />
+                                  <stop offset="1" stopColor="rgba(236,72,153,0)" />
+                                </linearGradient>
+                              </defs>
+                            </svg>
+                          </div>
+
+                          {/* Friendly Message */}
+                          <h4 className="text-base font-bold font-display uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 mb-2">
+                            The Staging lanes are empty!
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed max-w-sm mb-6 font-sans">
+                            No gamers or car tuners have registered their telemetry details yet. Be the pioneer to fire up the ignition and start the PlayFest 2026 database!
+                          </p>
+
+                          {/* Quick Interactive Call to Action Buttons */}
+                          <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+                            <button
+                              onClick={() => {
+                                sounds.playSelect();
+                                onClose();
+                              }}
+                              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-cyan-500/10 hover:from-cyan-500/30 hover:to-cyan-500/20 text-cyan-400 text-xs font-bold font-mono uppercase border border-cyan-500/30 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Ticket className="w-3.5 h-3.5" /> Start First Registration
+                            </button>
+                            <button
+                              onClick={async () => {
+                                sounds.playSelect();
+                                await loadData();
+                                addToast('Telemetry database updated.', 'success');
+                              }}
+                              className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold font-mono uppercase border border-white/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" /> Sync Telemetry
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   )}
