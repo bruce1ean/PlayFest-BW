@@ -403,14 +403,15 @@ export const storage = {
     local.push(newReg);
     saveLocalData(STORAGE_REGISTRATIONS_KEY, local);
 
-    // SAVE to Firebase if enabled
+    // SAVE to Firebase if enabled (non-blocking to prevent UI hangs on offline/network/iframe glitches)
     if (useFirebase && db) {
-      try {
-        await setDoc(doc(db, 'registrations', newReg.id), newReg);
-        console.log('Firebase registration saved successfully:', newReg.id);
-      } catch (error) {
-        console.error('Firestore Error saving registration:', error);
-      }
+      setDoc(doc(db, 'registrations', newReg.id), newReg)
+        .then(() => {
+          console.log('Firebase registration saved successfully:', newReg.id);
+        })
+        .catch((error) => {
+          console.error('Firestore Error saving registration:', error);
+        });
     }
 
     // Backup to Google Sheets asynchronously
