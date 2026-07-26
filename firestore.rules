@@ -9,26 +9,22 @@ service cloud.firestore {
 
     // Registrations rule
     match /registrations/{registrationId} {
-      allow create, read: if true;
-      allow update, delete: if request.auth != null;
+      allow read, write: if true;
     }
 
     // Vendors rule
     match /vendors/{vendorId} {
-      allow create, read: if true;
-      allow update, delete: if request.auth != null;
+      allow read, write: if true;
     }
 
     // Subscribers rule
     match /subscribers/{subscriberId} {
-      allow create, read: if true;
-      allow update, delete: if request.auth != null;
+      allow read, write: if true;
     }
 
     // Comments rule
     match /comments/{commentId} {
-      allow create, read: if true;
-      allow update, delete: if request.auth != null;
+      allow read, write: if true;
     }
 
     // Analytics dashboard rule

@@ -12,6 +12,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDocsFromServer,
   query, 
   doc, 
   setDoc,
@@ -371,7 +372,9 @@ export const storage = {
 
     if (useFirebase && db) {
       try {
-        const querySnapshot = await getDocs(collection(db, 'registrations'));
+        const querySnapshot = bypassCache
+          ? await getDocsFromServer(collection(db, 'registrations'))
+          : await getDocs(collection(db, 'registrations'));
         const firebaseList: AttendeeRegistration[] = [];
         querySnapshot.forEach((docSnap) => {
           firebaseList.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
