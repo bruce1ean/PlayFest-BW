@@ -40,7 +40,7 @@ const getFirebaseConfig = () => {
       messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
       appId: metaEnv.VITE_FIREBASE_APP_ID || '',
       measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || '',
-      firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)'
+      firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)'
     };
   }
   return firebaseConfig;
