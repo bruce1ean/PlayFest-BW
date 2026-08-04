@@ -100,9 +100,7 @@ app.post('/api/backup-registration', async (req, res) => {
           spreadsheet_id: spreadsheetId,
           sheetName,
           sheet_name: sheetName,
-          id: payload.id,
-          fullName: payload.fullName,
-          email: payload.email,
+          ...payload,
           phoneNumber: formattedPhoneNumber,
           ticketType,
           carRegistration,
@@ -165,7 +163,7 @@ app.post('/api/backup-registration', async (req, res) => {
     });
 
     const sheets = google.sheets({ version: 'v4', auth });
-    const range = `${sheetName}!A:G`;
+    const range = `${sheetName}!A:AE`;
 
     // Get existing rows to verify and enforce duplicate prevention
     let existingRows: any[][] = [];
@@ -179,9 +177,9 @@ app.post('/api/backup-registration', async (req, res) => {
       console.log(`[Sheets Database] Target sheet "${sheetName}" might be empty or uninitialized:`, getErr.message);
     }
 
-    // Check for duplicates based on Registration ID (can be Column G [index 6] or Column A [index 0] depending on older styles)
+    // Check for duplicates based on Registration ID (searches all cells of rows for regId)
     const regId = payload.id;
-    const isDuplicate = existingRows.some(row => row[6] === regId || row[0] === regId);
+    const isDuplicate = existingRows.some(row => row.includes(regId));
 
     if (isDuplicate) {
       console.log(`[Sheets Database] Registration ID ${regId} is already present in Google Sheets. Skipping to prevent duplicates.`);
@@ -191,13 +189,37 @@ app.post('/api/backup-registration', async (req, res) => {
       });
     }
 
-    // New format: Full Name, Email, Phone Number, Ticket Type, Car Meet registration, Timestamp, unique Registration ID
+    // Comprehensive format with 31 columns mapping all registration data
     const rowData = [
       payload.fullName,
       payload.email,
       formattedPhoneNumber,
+      payload.country || 'Botswana',
+      payload.city || '',
+      payload.ageGroup || '',
+      payload.gender || '',
+      payload.attendanceLikelihood || '',
+      payload.groupSize || '',
+      payload.travelDistance || '',
+      payload.referralSource || '',
+      payload.interests || '',
+      payload.approximateSpend || '',
+      payload.vipInterest || '',
+      payload.merchInterest || '',
+      payload.earlyTicketAccess || '',
       ticketType,
       carRegistration,
+      payload.gamingPlatform || '',
+      payload.gamingFavoriteGames || '',
+      payload.gamingParticipateInTournaments || '',
+      payload.gamingPreferredCategories || '',
+      payload.vehicleMake || '',
+      payload.vehicleModel || '',
+      payload.vehicleYear || '',
+      payload.vehicleBuildType || '',
+      payload.vehicleModifications || '',
+      payload.vehicleDisplayVehicle || '',
+      payload.vehicleEnterCompetitions || '',
       payload.createdAt || new Date().toISOString(),
       payload.id
     ];
@@ -208,8 +230,32 @@ app.post('/api/backup-registration', async (req, res) => {
         'Full Name',
         'Email',
         'Phone Number',
+        'Country',
+        'City',
+        'Age Group',
+        'Gender',
+        'Attendance Likelihood',
+        'Group Size',
+        'Travel Distance',
+        'Referral Source',
+        'Interests',
+        'Approximate Spend',
+        'VIP Interest',
+        'Merch Interest',
+        'Early Ticket Access',
         'Ticket Type',
         'Car Meet Registration',
+        'Gaming Platform',
+        'Favorite Games',
+        'Gaming Tournaments',
+        'Gaming Categories',
+        'Vehicle Make',
+        'Vehicle Model',
+        'Vehicle Year',
+        'Build Type',
+        'Modifications',
+        'Display Vehicle',
+        'Enter Competitions',
         'Timestamp',
         'Registration ID'
       ];

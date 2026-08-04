@@ -725,13 +725,24 @@ function doPost(e) {
       if (!sheet) {
         sheet = ss.insertSheet(sheetName);
         sheet.appendRow([
-          'Full Name', 'Email', 'Phone Number', 'Ticket Type', 
-          'Car Meet Registration', 'Timestamp', 'Registration ID'
+          'Full Name', 'Email', 'Phone Number', 'Country', 'City', 'Age Group', 'Gender',
+          'Attendance Likelihood', 'Group Size', 'Travel Distance', 'Referral Source',
+          'Interests', 'Approximate Spend', 'VIP Interest', 'Merch Interest',
+          'Early Ticket Access', 'Ticket Type', 'Car Meet Registration',
+          'Gaming Platform', 'Favorite Games', 'Gaming Tournaments', 'Gaming Categories',
+          'Vehicle Make', 'Vehicle Model', 'Vehicle Year', 'Build Type',
+          'Modifications', 'Display Vehicle', 'Enter Competitions', 'Timestamp', 'Registration ID'
         ]);
       }
       sheet.appendRow([
-        data.fullName, data.email, data.phoneNumber, data.ticketType,
-        data.carRegistration, data.createdAt || new Date().toISOString(), data.id
+        data.fullName, data.email, data.phoneNumber, data.country || 'Botswana', data.city || '', data.ageGroup || '', data.gender || '',
+        data.attendanceLikelihood || '', data.groupSize || '', data.travelDistance || '', data.referralSource || '',
+        data.interests || '', data.approximateSpend || '', data.vipInterest || '', data.merchInterest || '',
+        data.earlyTicketAccess || '', data.ticketType, data.carRegistration,
+        data.gamingPlatform || '', data.gamingFavoriteGames || '', data.gamingParticipateInTournaments || '', data.gamingPreferredCategories || '',
+        data.vehicleMake || '', data.vehicleModel || '', data.vehicleYear || '', data.vehicleBuildType || '',
+        data.vehicleModifications || '', data.vehicleDisplayVehicle || '', data.vehicleEnterCompetitions || '',
+        data.createdAt || new Date().toISOString(), data.id
       ]);
     }
     
