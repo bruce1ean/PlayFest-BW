@@ -370,8 +370,23 @@ export const storage = {
   // GET Registrations
   async getRegistrations(bypassCache = false): Promise<AttendeeRegistration[]> {
     const local = getLocalData<AttendeeRegistration[]>(STORAGE_REGISTRATIONS_KEY, []);
-    let blended = [...local];
+    const blendedMap = new Map<string, AttendeeRegistration>();
 
+    const getKey = (r: AttendeeRegistration) => {
+      if (r.id && !r.id.startsWith('reg_sheets_') && r.id !== 'Male' && r.id !== 'Female') {
+        return r.id;
+      }
+      return r.email ? `email:${r.email.toLowerCase().trim()}` : (r.id || `reg_${Math.random()}`);
+    };
+
+    // 1. Add LocalStorage records
+    for (const item of local) {
+      if (item && (item.fullName || item.email)) {
+        blendedMap.set(getKey(item), item);
+      }
+    }
+
+    // 2. Add Google Sheets API records
     try {
       const response = await fetch(`/api/registrations${bypassCache ? '?bypassCache=true' : ''}`);
       if (response.ok) {
@@ -380,41 +395,50 @@ export const storage = {
           const data = await response.json();
           if (data && data.success && Array.isArray(data.registrations)) {
             const sheetRegs = data.registrations as AttendeeRegistration[];
-            
-            // Merge sheetRegs with local storage, ensuring we prioritize sheet records and avoid duplicates
-            const sheetIds = new Set(sheetRegs.map(r => r.id));
-            const localOnly = local.filter(l => !sheetIds.has(l.id));
-            blended = [...sheetRegs, ...localOnly];
+            for (const item of sheetRegs) {
+              if (item && (item.fullName || item.email)) {
+                const key = getKey(item);
+                const existing = blendedMap.get(key);
+                if (existing) {
+                  blendedMap.set(key, { ...existing, ...item });
+                } else {
+                  blendedMap.set(key, item);
+                }
+              }
+            }
           }
-        } else {
-          console.log('[Storage] Fetch registrations response was not JSON:', contentType);
         }
       }
     } catch (error) {
       console.log('Error fetching registrations from Google Sheets API, falling back to LocalStorage:', error);
     }
 
+    // 3. Add Firebase Firestore records
     if (useFirebase && db) {
       try {
         const querySnapshot = bypassCache
           ? await getDocsFromServer(collection(db, 'registrations'))
           : await getDocs(collection(db, 'registrations'));
-        const firebaseList: AttendeeRegistration[] = [];
         querySnapshot.forEach((docSnap) => {
-          firebaseList.push({ id: docSnap.id, ...docSnap.data() } as AttendeeRegistration);
-        });
-        
-        const ids = new Set(blended.map(r => r.id));
-        firebaseList.forEach(item => {
-          if (!ids.has(item.id)) {
-            blended.push(item);
+          const data = docSnap.data() as AttendeeRegistration;
+          const item = { id: docSnap.id, ...data };
+          if (item && (item.fullName || item.email)) {
+            const key = getKey(item);
+            const existing = blendedMap.get(key);
+            if (existing) {
+              blendedMap.set(key, { ...existing, ...item });
+            } else {
+              blendedMap.set(key, item);
+            }
           }
         });
       } catch (error) {
         console.warn('Error fetching registrations from Firebase, falling back to LocalStorage:', error);
       }
     }
-    return blended.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const blended = Array.from(blendedMap.values());
+    return blended.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   },
 
   // SAVE Registration

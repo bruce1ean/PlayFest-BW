@@ -26,7 +26,9 @@ import {
   Lock,
   EyeOff,
   Clock,
-  Info
+  Info,
+  Search,
+  Filter
 } from 'lucide-react';
 import { AttendeeRegistration } from '../types';
 import { storage } from '../lib/storage';
@@ -46,6 +48,23 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  const filteredRegs = regs.filter(r => {
+    const matchesSearch = !searchQuery || 
+      (r.fullName && r.fullName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.email && r.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.phoneNumber && String(r.phoneNumber).includes(searchQuery)) ||
+      (r.city && r.city.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesCategory = categoryFilter === 'all' ||
+      (categoryFilter === 'car_meet' && ((r.interests || []).includes('car_meet') || Boolean(r.carDetails))) ||
+      (categoryFilter === 'gaming' && ((r.interests || []).includes('gaming') || Boolean(r.gamingDetails))) ||
+      (categoryFilter === 'vip' && (r.vipInterest === 'Yes' || (r.ticketType || '').toLowerCase().includes('vip')));
+
+    return matchesSearch && matchesCategory;
+  });
 
   // Real-time Countdown Timer target: Nov 21, 2026
   const targetDate = new Date('2026-11-21T12:00:00+02:00').getTime();
@@ -861,6 +880,57 @@ function doPost(e) {
             </div>
           </div>
 
+          {/* Search & Filter Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 bg-white/[0.02] p-3 rounded-xl border border-white/5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, email, phone, or city..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-black/60 border border-white/10 text-xs font-mono text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400/50 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+              <span className="text-[10px] font-mono uppercase text-gray-500 flex items-center gap-1 font-bold">
+                <Filter className="w-3 h-3" /> Filter:
+              </span>
+              {[
+                { id: 'all', label: 'All Registrations' },
+                { id: 'car_meet', label: '🚗 Car Showcase' },
+                { id: 'gaming', label: '🎮 Gaming' },
+                { id: 'vip', label: '🎟️ VIP Tier' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    sounds.playSelect();
+                    setCategoryFilter(tab.id);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase transition-all whitespace-nowrap cursor-pointer ${
+                    categoryFilter === tab.id
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                      : 'bg-white/5 text-gray-400 border border-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {loading ? (
             <div className="text-center py-20 text-gray-500">
               <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-cyan-400" />
@@ -879,7 +949,7 @@ function doPost(e) {
                   </tr>
                 </thead>
                 <tbody className="text-sm font-light divide-y divide-white/5">
-                  {regs.map(r => {
+                  {filteredRegs.map(r => {
                     const isExpanded = expandedId === r.id;
                     return (
                       <React.Fragment key={r.id}>
@@ -1157,7 +1227,7 @@ function doPost(e) {
                       </React.Fragment>
                     );
                   })}
-                  {regs.length === 0 && (
+                  {filteredRegs.length === 0 && (
                     <tr>
                       <td colSpan={5} className="p-8 sm:p-12 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center">

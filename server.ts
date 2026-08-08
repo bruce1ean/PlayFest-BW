@@ -1101,7 +1101,7 @@ app.get('/api/registrations', async (req, res) => {
     });
 
     const sheets = google.sheets({ version: 'v4', auth });
-    const range = `${sheetName}!A:G`;
+    const range = `${sheetName}!A:AZ`;
 
     const getResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -1114,52 +1114,113 @@ app.get('/api/registrations', async (req, res) => {
     }
 
     const headers = rows[0];
-    const emailIndex = headers.indexOf('Email');
-    const fullNameIndex = headers.indexOf('Full Name');
-    const phoneIndex = headers.indexOf('Phone Number');
-    const ticketIndex = headers.indexOf('Ticket Type');
-    const carIndex = headers.indexOf('Car Meet Registration');
-    const timestampIndex = headers.indexOf('Timestamp');
-    const idIndex = headers.indexOf('Registration ID');
+    const getVal = (row: any[], headerName: string, fallbackIdx: number, defaultVal: string = '') => {
+      const idx = headers.indexOf(headerName);
+      if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '') {
+        return String(row[idx]).trim();
+      }
+      if (fallbackIdx >= 0 && fallbackIdx < row.length && row[fallbackIdx] !== undefined && row[fallbackIdx] !== null && String(row[fallbackIdx]).trim() !== '') {
+        return String(row[fallbackIdx]).trim();
+      }
+      return defaultVal;
+    };
 
     const registrations = rows.slice(1).map((row, i) => {
-      // Decode row based on found indexes, fallback to traditional order if needed
-      const id = idIndex !== -1 ? row[idIndex] : (row[6] || `reg_sheets_${i}`);
-      const fullName = fullNameIndex !== -1 ? row[fullNameIndex] : (row[0] || 'Unknown Attendee');
-      const email = emailIndex !== -1 ? row[emailIndex] : (row[1] || 'no-email@example.com');
-      const phoneNumber = phoneIndex !== -1 ? row[phoneIndex] : (row[2] || '');
-      const ticketType = ticketIndex !== -1 ? row[ticketIndex] : (row[3] || 'General Access');
-      const carRegistration = carIndex !== -1 ? row[carIndex] : (row[4] || 'No');
-      const createdAt = timestampIndex !== -1 ? row[timestampIndex] : (row[5] || new Date().toISOString());
+      const id = getVal(row, 'Registration ID', 30, `reg_sheets_${i}_${Date.now()}`);
+      const fullName = getVal(row, 'Full Name', 0, 'Attendee');
+      const email = getVal(row, 'Email', 1, 'no-email@example.com');
+      const phoneNumber = getVal(row, 'Phone Number', 2, '');
+      const country = getVal(row, 'Country', 3, 'Botswana');
+      const city = getVal(row, 'City', 4, 'Gaborone');
+      const ageGroup = getVal(row, 'Age Group', 5, '25-34');
+      const gender = getVal(row, 'Gender', 6, 'Not specified');
+      const attendanceLikelihood = getVal(row, 'Attendance Likelihood', 7, 'Definitely');
+      const groupSize = getVal(row, 'Group Size', 8, 'Just Me');
+      const travelDistance = getVal(row, 'Travel Distance', 9, 'Within my city');
+      const referralSource = getVal(row, 'Referral Source', 10, 'Other');
+      const interestsStr = getVal(row, 'Interests', 11, '');
+      const approximateSpend = getVal(row, 'Approximate Spend', 12, 'P200–P500');
+      const vipInterest = getVal(row, 'VIP Interest', 13, 'No');
+      const merchInterest = getVal(row, 'Merch Interest', 14, 'No');
+      const earlyTicketAccess = getVal(row, 'Early Ticket Access', 15, 'No');
+      const ticketType = getVal(row, 'Ticket Type', 16, 'General Access');
+      const carRegistration = getVal(row, 'Car Meet Registration', 17, 'No');
+      const gamingPlatform = getVal(row, 'Gaming Platform', 18, '');
+      const favoriteGames = getVal(row, 'Favorite Games', 19, '');
+      const participateInTournaments = getVal(row, 'Gaming Tournaments', 20, '');
+      const preferredCategoriesStr = getVal(row, 'Gaming Categories', 21, '');
+      const vehicleMake = getVal(row, 'Vehicle Make', 22, '');
+      const vehicleModel = getVal(row, 'Vehicle Model', 23, '');
+      const vehicleYear = getVal(row, 'Vehicle Year', 24, '');
+      const buildType = getVal(row, 'Build Type', 25, '');
+      const modifications = getVal(row, 'Modifications', 26, '');
+      const displayVehicle = getVal(row, 'Display Vehicle', 27, '');
+      const enterCompetitions = getVal(row, 'Enter Competitions', 28, '');
+      const createdAt = getVal(row, 'Timestamp', 29, new Date().toISOString());
 
-      const isCarMeetRegistered = carRegistration && !carRegistration.toLowerCase().includes('no');
+      let interests: string[] = [];
+      if (interestsStr) {
+        interests = interestsStr.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (interests.length === 0) {
+        if (carRegistration && !carRegistration.toLowerCase().includes('no')) {
+          interests.push('car_meet');
+        }
+        if (gamingPlatform || favoriteGames) {
+          interests.push('gaming');
+        }
+        if (interests.length === 0) {
+          interests = ['general_access'];
+        }
+      }
+
+      let carDetails = undefined;
+      const isCarMeet = (carRegistration && !carRegistration.toLowerCase().includes('no')) || Boolean(vehicleMake || vehicleModel);
+      if (isCarMeet) {
+        carDetails = {
+          vehicleMake: vehicleMake || 'Custom Build',
+          vehicleModel: vehicleModel || carRegistration,
+          year: vehicleYear || 'N/A',
+          buildType: buildType || 'Custom',
+          modifications: modifications || 'Showcase Build',
+          displayVehicle: displayVehicle || 'Yes',
+          enterCompetitions: enterCompetitions || 'No'
+        };
+      }
+
+      let gamingDetails = undefined;
+      if (gamingPlatform || favoriteGames || participateInTournaments) {
+        gamingDetails = {
+          platform: gamingPlatform || 'PC / Console',
+          favoriteGames: favoriteGames || 'Esports',
+          participateInTournaments: participateInTournaments || 'No',
+          preferredCategories: preferredCategoriesStr ? preferredCategoriesStr.split(',').map(s => s.trim()) : []
+        };
+      }
 
       return {
         id,
         fullName,
         email,
         phoneNumber,
-        city: 'Gaborone',
-        ageGroup: '25-34',
-        attendanceLikelihood: 'Definitely',
-        groupSize: 'Just Me',
-        travelDistance: 'Within my city',
-        referralSource: 'Other',
-        interests: isCarMeetRegistered ? ['car_meet'] : [],
-        approximateSpend: 'P200–P500',
-        vipInterest: ticketType.toLowerCase().includes('vip') ? 'Yes' : 'No',
-        merchInterest: 'No',
-        earlyTicketAccess: 'No',
+        country,
+        city,
+        ageGroup,
+        gender,
+        attendanceLikelihood,
+        groupSize,
+        travelDistance,
+        referralSource,
+        interests,
+        approximateSpend,
+        vipInterest,
+        merchInterest,
+        earlyTicketAccess,
+        ticketType,
+        carRegistration,
         createdAt,
-        carDetails: isCarMeetRegistered ? {
-          vehicleMake: 'Custom Build',
-          vehicleModel: carRegistration,
-          year: 'N/A',
-          buildType: 'Custom',
-          modifications: 'Details saved on Google Sheet',
-          displayVehicle: 'Yes',
-          enterCompetitions: 'No'
-        } : undefined
+        carDetails,
+        gamingDetails
       };
     });
 
