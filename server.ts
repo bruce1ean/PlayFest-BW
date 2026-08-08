@@ -4,13 +4,60 @@ dotenv.config();
 
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
+import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
+import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
 
 const app = express();
 const PORT = 3000;
+
+// Initialize Server-Side Firestore for reliable cross-device sync
+let serverDb: any = null;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (firebaseConfig && firebaseConfig.projectId) {
+      const fbApp = getFirebaseApps().length ? getFirebaseApp() : initFirebaseApp(firebaseConfig);
+      serverDb = getFirebaseFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
+      console.log('[Server Database] Firebase Firestore initialized on server.');
+    }
+  }
+} catch (fbErr) {
+  console.warn('[Server Database] Could not initialize Firebase on server:', fbErr);
+}
+
+async function fetchFirestoreRegistrations(): Promise<any[]> {
+  if (!serverDb) return [];
+  try {
+    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'registrations'));
+    const list: any[] = [];
+    snap.forEach((d) => {
+      list.push({ id: d.id, ...d.data() });
+    });
+    console.log(`[Server Database] Successfully fetched ${list.length} registrations from Firestore.`);
+    return list;
+  } catch (err: any) {
+    console.warn('[Server Database] Error fetching registrations from Firestore:', err.message || err);
+    return [];
+  }
+}
+
+async function saveFirestoreRegistration(reg: any): Promise<boolean> {
+  if (!serverDb || !reg || !reg.id) return false;
+  try {
+    await firestoreSetDoc(firestoreDoc(serverDb, 'registrations', reg.id), reg);
+    console.log(`[Server Database] Successfully saved registration ${reg.id} to Firestore.`);
+    return true;
+  } catch (err: any) {
+    console.warn(`[Server Database] Error saving registration ${reg.id} to Firestore:`, err.message || err);
+    return false;
+  }
+}
 
 // In-memory cache to prevent slow Google Sheets API reads and make stats instant
 let registrationsCache: { registrations: any[]; timestamp: number } | null = null;
@@ -53,16 +100,21 @@ app.post('/api/backup-registration', async (req, res) => {
   invalidateSheetsCache();
 
   // Logging incoming backup payload
-  console.log('[Sheets Database] Received save request for registration:', payload?.id);
+  console.log('[Database API] Received save request for registration:', payload?.id);
 
   // Quick validation of the registration payload
   if (!payload || !payload.id || !payload.fullName || !payload.email) {
-    console.warn('[Sheets Database] Invalid payload received:', payload);
+    console.warn('[Database API] Invalid payload received:', payload);
     return res.status(400).json({
       success: false,
       error: 'Missing required attendee registration fields.',
     });
   }
+
+  // Ensure record is saved in Firestore directly from server
+  saveFirestoreRegistration(payload).catch(err => {
+    console.warn('[Database API] Async server firestore write error:', err);
+  });
 
   // Extract config
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
@@ -1023,17 +1075,35 @@ app.post('/api/reset-registrations', async (req, res) => {
   }
 });
 
-// GET Registrations from Google Sheets (or fallback)
+// GET Registrations from Firestore & Google Sheets
 app.get('/api/registrations', async (req, res) => {
   const bypassCache = req.query.bypassCache === 'true';
   if (!bypassCache && registrationsCache && (Date.now() - registrationsCache.timestamp < CACHE_TTL_MS)) {
-    console.log('[Sheets Database] Returning cached registrations list.');
+    console.log('[Database API] Returning cached merged registrations list.');
     return res.json({
       success: true,
       registrations: registrationsCache.registrations,
     });
   }
 
+  const blendedMap = new Map<string, any>();
+  const getKey = (r: any) => {
+    if (r.id && !r.id.startsWith('reg_sheets_') && r.id !== 'Male' && r.id !== 'Female') {
+      return r.id;
+    }
+    return r.email ? `email:${r.email.toLowerCase().trim()}` : (r.id || `reg_${Math.random()}`);
+  };
+
+  // 1. Fetch from Firestore (cloud database)
+  const firestoreRegs = await fetchFirestoreRegistrations();
+  for (const item of firestoreRegs) {
+    if (item && (item.fullName || item.email)) {
+      blendedMap.set(getKey(item), item);
+    }
+  }
+
+  // 2. Fetch from Google Sheets Apps Script or Service Account
+  let sheetsRegs: any[] = [];
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -1041,45 +1111,25 @@ app.get('/api/registrations', async (req, res) => {
   const spreadsheetId = cleanSpreadsheetId(rawSpreadsheetId);
   const sheetName = process.env.GOOGLE_SHEET_NAME || 'Attendees';
 
-  // 1. Prioritize Google Sheets Apps Script Web App URL if configured
-  if (webAppUrl) {
+  if (webAppUrl && !webAppUrl.includes('docs.google.com/spreadsheets')) {
     try {
-      if (webAppUrl.includes('docs.google.com/spreadsheets')) {
-        console.log('[Sheets Database] Note: GOOGLE_SHEETS_WEBAPP_URL contains a standard sheet URL instead of a web app /exec URL.');
-      } else {
-        console.log('[Sheets Database] WebApp URL configured. Fetching registrations via Apps Script Web App...');
-        const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}spreadsheetId=${encodeURIComponent(spreadsheetId)}&spreadsheet_id=${encodeURIComponent(spreadsheetId)}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
-        const response = await fetch(fetchUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          }
-        });
-        if (response.ok) {
-          const responseText = await response.text();
-          
-          if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-            console.log('[Sheets Database] Web App response is in HTML format. Falling back to alternative storage.');
-          } else {
-            let data: any;
-            try {
-              data = JSON.parse(responseText);
-            } catch (jsonErr: any) {
-              console.log('[Sheets Database] Response parsing parsed with issues. Falling back to alternative storage.');
-            }
-
+      console.log('[Sheets Database] Fetching registrations via Apps Script Web App...');
+      const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}spreadsheetId=${encodeURIComponent(spreadsheetId || '')}&sheetName=${encodeURIComponent(sheetName)}`;
+      const response = await fetch(fetchUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const responseText = await response.text();
+        if (!responseText.trim().startsWith('<!DOCTYPE') && !responseText.trim().startsWith('<html')) {
+          let data: any;
+          try {
+            data = JSON.parse(responseText);
             if (data && data.success && Array.isArray(data.registrations)) {
-              console.log(`[Sheets Database] Successfully fetched ${data.registrations.length} registrations via Apps Script Web App.`);
-              registrationsCache = {
-                registrations: data.registrations,
-                timestamp: Date.now()
-              };
-              return res.json({
-                success: true,
-                registrations: data.registrations,
-              });
+              sheetsRegs = data.registrations;
+              console.log(`[Sheets Database] Successfully fetched ${sheetsRegs.length} registrations via Apps Script Web App.`);
             }
-          }
+          } catch {}
         }
       }
     } catch (err: any) {
@@ -1087,206 +1137,223 @@ app.get('/api/registrations', async (req, res) => {
     }
   }
 
-  if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
-    console.log('[Sheets Database] Service account config missing for GET registrations. Returning empty list or local simulated backup.');
-    return res.json({ success: true, registrations: [] });
-  }
+  if (sheetsRegs.length === 0 && serviceAccountEmail && rawPrivateKey && spreadsheetId) {
+    try {
+      const privateKey = cleanPrivateKey(rawPrivateKey);
+      const auth = new google.auth.JWT({
+        email: serviceAccountEmail,
+        key: privateKey,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
 
-  try {
-    const privateKey = cleanPrivateKey(rawPrivateKey);
-    const auth = new google.auth.JWT({
-      email: serviceAccountEmail,
-      key: privateKey,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
+      const sheets = google.sheets({ version: 'v4', auth });
+      const getResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A:AZ`,
+      });
 
-    const sheets = google.sheets({ version: 'v4', auth });
-    const range = `${sheetName}!A:AZ`;
+      const rows = getResponse.data.values || [];
+      if (rows.length > 1) {
+        const headers = rows[0] || [];
+        const isLegacyFormat = !headers.includes('City') && !headers.includes('Country');
 
-    const getResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range,
-    });
+        sheetsRegs = rows.slice(1).map((row, i) => {
+          let id = `reg_sheets_${i}_${Date.now()}`;
+          let fullName = 'Attendee';
+          let email = 'no-email@example.com';
+          let phoneNumber = '';
+          let country = 'Botswana';
+          let city = 'Gaborone';
+          let ageGroup = '25-34';
+          let gender = 'Not specified';
+          let attendanceLikelihood = 'Definitely';
+          let groupSize = 'Just Me';
+          let travelDistance = 'Within my city';
+          let referralSource = 'Other';
+          let interestsStr = '';
+          let approximateSpend = 'P200–P500';
+          let vipInterest = 'No';
+          let merchInterest = 'No';
+          let earlyTicketAccess = 'No';
+          let ticketType = 'General Access';
+          let carRegistration = 'No';
+          let gamingPlatform = '';
+          let favoriteGames = '';
+          let participateInTournaments = '';
+          let preferredCategoriesStr = '';
+          let vehicleMake = '';
+          let vehicleModel = '';
+          let vehicleYear = '';
+          let buildType = '';
+          let modifications = '';
+          let displayVehicle = '';
+          let enterCompetitions = '';
+          let createdAt = new Date().toISOString();
 
-    const rows = getResponse.data.values || [];
-    if (rows.length <= 1) {
-      return res.json({ success: true, registrations: [] });
+          if (isLegacyFormat || row.length <= 8) {
+            fullName = row[0] || 'Attendee';
+            email = row[1] || 'no-email@example.com';
+            phoneNumber = row[2] || '';
+            ticketType = row[3] || 'General Access';
+            carRegistration = row[4] || 'No';
+            createdAt = row[5] || new Date().toISOString();
+            id = row[6] || `reg_sheets_${i}`;
+            vipInterest = ticketType.toLowerCase().includes('vip') ? 'Yes' : 'No';
+          } else {
+            const getVal = (headerName: string, fallbackIdx: number, defaultVal: string = '') => {
+              const idx = headers.indexOf(headerName);
+              if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '') {
+                return String(row[idx]).trim();
+              }
+              if (!headers.length && fallbackIdx >= 0 && fallbackIdx < row.length && row[fallbackIdx] !== undefined && row[fallbackIdx] !== null && String(row[fallbackIdx]).trim() !== '') {
+                return String(row[fallbackIdx]).trim();
+              }
+              return defaultVal;
+            };
+
+            id = getVal('Registration ID', 30, `reg_sheets_${i}_${Date.now()}`);
+            fullName = getVal('Full Name', 0, 'Attendee');
+            email = getVal('Email', 1, 'no-email@example.com');
+            phoneNumber = getVal('Phone Number', 2, '');
+            country = getVal('Country', 3, 'Botswana');
+            city = getVal('City', 4, 'Gaborone');
+            ageGroup = getVal('Age Group', 5, '25-34');
+            gender = getVal('Gender', 6, 'Not specified');
+            attendanceLikelihood = getVal('Attendance Likelihood', 7, 'Definitely');
+            groupSize = getVal('Group Size', 8, 'Just Me');
+            travelDistance = getVal('Travel Distance', 9, 'Within my city');
+            referralSource = getVal('Referral Source', 10, 'Other');
+            interestsStr = getVal('Interests', 11, '');
+            approximateSpend = getVal('Approximate Spend', 12, 'P200–P500');
+            vipInterest = getVal('VIP Interest', 13, 'No');
+            merchInterest = getVal('Merch Interest', 14, 'No');
+            earlyTicketAccess = getVal('Early Ticket Access', 15, 'No');
+            ticketType = getVal('Ticket Type', 16, 'General Access');
+            carRegistration = getVal('Car Meet Registration', 17, 'No');
+            gamingPlatform = getVal('Gaming Platform', 18, '');
+            favoriteGames = getVal('Favorite Games', 19, '');
+            participateInTournaments = getVal('Gaming Tournaments', 20, '');
+            preferredCategoriesStr = getVal('Gaming Categories', 21, '');
+            vehicleMake = getVal('Vehicle Make', 22, '');
+            vehicleModel = getVal('Vehicle Model', 23, '');
+            vehicleYear = getVal('Vehicle Year', 24, '');
+            buildType = getVal('Build Type', 25, '');
+            modifications = getVal('Modifications', 26, '');
+            displayVehicle = getVal('Display Vehicle', 27, '');
+            enterCompetitions = getVal('Enter Competitions', 28, '');
+            createdAt = getVal('Timestamp', 29, new Date().toISOString());
+          }
+
+          let interests: string[] = [];
+          if (interestsStr) {
+            interests = interestsStr.split(',').map(s => s.trim()).filter(Boolean);
+          }
+          if (interests.length === 0) {
+            if (carRegistration && !carRegistration.toLowerCase().includes('no')) {
+              interests.push('car_meet');
+            }
+            if (gamingPlatform || favoriteGames) {
+              interests.push('gaming');
+            }
+            if (interests.length === 0) {
+              interests = ['general_access'];
+            }
+          }
+
+          let carDetails = undefined;
+          const isCarMeet = (carRegistration && !carRegistration.toLowerCase().includes('no')) || Boolean(vehicleMake || vehicleModel);
+          if (isCarMeet) {
+            carDetails = {
+              vehicleMake: vehicleMake || 'Custom Build',
+              vehicleModel: vehicleModel || carRegistration,
+              year: vehicleYear || 'N/A',
+              buildType: buildType || 'Custom',
+              modifications: modifications || 'Showcase Build',
+              displayVehicle: displayVehicle || 'Yes',
+              enterCompetitions: enterCompetitions || 'No'
+            };
+          }
+
+          let gamingDetails = undefined;
+          if (gamingPlatform || favoriteGames || participateInTournaments) {
+            gamingDetails = {
+              platform: gamingPlatform || 'PC / Console',
+              favoriteGames: favoriteGames || 'Esports',
+              participateInTournaments: participateInTournaments || 'No',
+              preferredCategories: preferredCategoriesStr ? preferredCategoriesStr.split(',').map(s => s.trim()) : []
+            };
+          }
+
+          return {
+            id,
+            fullName,
+            email,
+            phoneNumber,
+            country,
+            city,
+            ageGroup,
+            gender,
+            attendanceLikelihood,
+            groupSize,
+            travelDistance,
+            referralSource,
+            interests,
+            approximateSpend,
+            vipInterest,
+            merchInterest,
+            earlyTicketAccess,
+            ticketType,
+            carRegistration,
+            createdAt,
+            carDetails,
+            gamingDetails
+          };
+        });
+      }
+    } catch (err: any) {
+      console.warn('[Sheets Database] Error querying Google Sheets via Service Account:', err.message || err);
     }
-
-    const headers = rows[0] || [];
-    const isLegacyFormat = !headers.includes('City') && !headers.includes('Country');
-
-    const registrations = rows.slice(1).map((row, i) => {
-      let id = `reg_sheets_${i}_${Date.now()}`;
-      let fullName = 'Attendee';
-      let email = 'no-email@example.com';
-      let phoneNumber = '';
-      let country = 'Botswana';
-      let city = 'Gaborone';
-      let ageGroup = '25-34';
-      let gender = 'Not specified';
-      let attendanceLikelihood = 'Definitely';
-      let groupSize = 'Just Me';
-      let travelDistance = 'Within my city';
-      let referralSource = 'Other';
-      let interestsStr = '';
-      let approximateSpend = 'P200–P500';
-      let vipInterest = 'No';
-      let merchInterest = 'No';
-      let earlyTicketAccess = 'No';
-      let ticketType = 'General Access';
-      let carRegistration = 'No';
-      let gamingPlatform = '';
-      let favoriteGames = '';
-      let participateInTournaments = '';
-      let preferredCategoriesStr = '';
-      let vehicleMake = '';
-      let vehicleModel = '';
-      let vehicleYear = '';
-      let buildType = '';
-      let modifications = '';
-      let displayVehicle = '';
-      let enterCompetitions = '';
-      let createdAt = new Date().toISOString();
-
-      if (isLegacyFormat || row.length <= 8) {
-        fullName = row[0] || 'Attendee';
-        email = row[1] || 'no-email@example.com';
-        phoneNumber = row[2] || '';
-        ticketType = row[3] || 'General Access';
-        carRegistration = row[4] || 'No';
-        createdAt = row[5] || new Date().toISOString();
-        id = row[6] || `reg_sheets_${i}`;
-        vipInterest = ticketType.toLowerCase().includes('vip') ? 'Yes' : 'No';
-      } else {
-        const getVal = (headerName: string, fallbackIdx: number, defaultVal: string = '') => {
-          const idx = headers.indexOf(headerName);
-          if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '') {
-            return String(row[idx]).trim();
-          }
-          if (!headers.length && fallbackIdx >= 0 && fallbackIdx < row.length && row[fallbackIdx] !== undefined && row[fallbackIdx] !== null && String(row[fallbackIdx]).trim() !== '') {
-            return String(row[fallbackIdx]).trim();
-          }
-          return defaultVal;
-        };
-
-        id = getVal('Registration ID', 30, `reg_sheets_${i}_${Date.now()}`);
-        fullName = getVal('Full Name', 0, 'Attendee');
-        email = getVal('Email', 1, 'no-email@example.com');
-        phoneNumber = getVal('Phone Number', 2, '');
-        country = getVal('Country', 3, 'Botswana');
-        city = getVal('City', 4, 'Gaborone');
-        ageGroup = getVal('Age Group', 5, '25-34');
-        gender = getVal('Gender', 6, 'Not specified');
-        attendanceLikelihood = getVal('Attendance Likelihood', 7, 'Definitely');
-        groupSize = getVal('Group Size', 8, 'Just Me');
-        travelDistance = getVal('Travel Distance', 9, 'Within my city');
-        referralSource = getVal('Referral Source', 10, 'Other');
-        interestsStr = getVal('Interests', 11, '');
-        approximateSpend = getVal('Approximate Spend', 12, 'P200–P500');
-        vipInterest = getVal('VIP Interest', 13, 'No');
-        merchInterest = getVal('Merch Interest', 14, 'No');
-        earlyTicketAccess = getVal('Early Ticket Access', 15, 'No');
-        ticketType = getVal('Ticket Type', 16, 'General Access');
-        carRegistration = getVal('Car Meet Registration', 17, 'No');
-        gamingPlatform = getVal('Gaming Platform', 18, '');
-        favoriteGames = getVal('Favorite Games', 19, '');
-        participateInTournaments = getVal('Gaming Tournaments', 20, '');
-        preferredCategoriesStr = getVal('Gaming Categories', 21, '');
-        vehicleMake = getVal('Vehicle Make', 22, '');
-        vehicleModel = getVal('Vehicle Model', 23, '');
-        vehicleYear = getVal('Vehicle Year', 24, '');
-        buildType = getVal('Build Type', 25, '');
-        modifications = getVal('Modifications', 26, '');
-        displayVehicle = getVal('Display Vehicle', 27, '');
-        enterCompetitions = getVal('Enter Competitions', 28, '');
-        createdAt = getVal('Timestamp', 29, new Date().toISOString());
-      }
-
-      let interests: string[] = [];
-      if (interestsStr) {
-        interests = interestsStr.split(',').map(s => s.trim()).filter(Boolean);
-      }
-      if (interests.length === 0) {
-        if (carRegistration && !carRegistration.toLowerCase().includes('no')) {
-          interests.push('car_meet');
-        }
-        if (gamingPlatform || favoriteGames) {
-          interests.push('gaming');
-        }
-        if (interests.length === 0) {
-          interests = ['general_access'];
-        }
-      }
-
-      let carDetails = undefined;
-      const isCarMeet = (carRegistration && !carRegistration.toLowerCase().includes('no')) || Boolean(vehicleMake || vehicleModel);
-      if (isCarMeet) {
-        carDetails = {
-          vehicleMake: vehicleMake || 'Custom Build',
-          vehicleModel: vehicleModel || carRegistration,
-          year: vehicleYear || 'N/A',
-          buildType: buildType || 'Custom',
-          modifications: modifications || 'Showcase Build',
-          displayVehicle: displayVehicle || 'Yes',
-          enterCompetitions: enterCompetitions || 'No'
-        };
-      }
-
-      let gamingDetails = undefined;
-      if (gamingPlatform || favoriteGames || participateInTournaments) {
-        gamingDetails = {
-          platform: gamingPlatform || 'PC / Console',
-          favoriteGames: favoriteGames || 'Esports',
-          participateInTournaments: participateInTournaments || 'No',
-          preferredCategories: preferredCategoriesStr ? preferredCategoriesStr.split(',').map(s => s.trim()) : []
-        };
-      }
-
-      return {
-        id,
-        fullName,
-        email,
-        phoneNumber,
-        country,
-        city,
-        ageGroup,
-        gender,
-        attendanceLikelihood,
-        groupSize,
-        travelDistance,
-        referralSource,
-        interests,
-        approximateSpend,
-        vipInterest,
-        merchInterest,
-        earlyTicketAccess,
-        ticketType,
-        carRegistration,
-        createdAt,
-        carDetails,
-        gamingDetails
-      };
-    });
-
-    registrationsCache = {
-      registrations,
-      timestamp: Date.now()
-    };
-
-    return res.json({
-      success: true,
-      registrations,
-    });
-  } catch (error: any) {
-    console.error('[Sheets Database] Failed to query registrations from Google Sheets:', error);
-    // Return standard success but empty array so it doesn't crash admin UI, but logs errors.
-    return res.json({
-      success: true,
-      registrations: [],
-      error: error.message || error
-    });
   }
+
+  // Merge Sheets records into Blended Map
+  for (const rawItem of sheetsRegs) {
+    if (rawItem && (rawItem.fullName || rawItem.email)) {
+      const isCarReg = rawItem.carRegistration && !String(rawItem.carRegistration).toLowerCase().includes('no');
+      const normalizedItem = {
+        ...rawItem,
+        city: rawItem.city || 'Gaborone',
+        country: rawItem.country || 'Botswana',
+        ageGroup: rawItem.ageGroup || '25-34',
+        attendanceLikelihood: rawItem.attendanceLikelihood || 'Definitely',
+        groupSize: rawItem.groupSize || 'Just Me',
+        interests: (rawItem.interests && rawItem.interests.length > 0) ? rawItem.interests : (
+          isCarReg ? ['car_meet'] : ['general_access']
+        ),
+        vipInterest: rawItem.vipInterest || (rawItem.ticketType?.toLowerCase().includes('vip') ? 'Yes' : 'No')
+      };
+      const key = getKey(normalizedItem);
+      const existing = blendedMap.get(key);
+      if (existing) {
+        blendedMap.set(key, { ...existing, ...normalizedItem });
+      } else {
+        blendedMap.set(key, normalizedItem);
+      }
+    }
+  }
+
+  const allRegistrations = Array.from(blendedMap.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+
+  registrationsCache = {
+    registrations: allRegistrations,
+    timestamp: Date.now()
+  };
+
+  return res.json({
+    success: true,
+    registrations: allRegistrations,
+  });
 });
 
 // GET Vendors from Google Sheets (or fallback)
