@@ -85,7 +85,7 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
     }
 
     // Conditional validations
-    if (passions.includes('car_meet') && !carMakeModel.trim()) {
+    if (passions.includes('car_meet') && carDisplay === 'Yes' && !carMakeModel.trim()) {
       sounds.playCancel();
       addToast('Please specify your vehicle details for the Car Meet.', 'error');
       return;
@@ -146,16 +146,17 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
       }
 
       if (passions.includes('car_meet')) {
+        const hasCar = carMakeModel.trim().length > 0;
         const parts = carMakeModel.trim().split(' ');
-        const make = parts[0] || 'Custom';
-        const model = parts.slice(1).join(' ') || 'Tuner';
+        const make = hasCar ? (parts[0] || 'Custom') : 'N/A';
+        const model = hasCar ? (parts.slice(1).join(' ') || 'Spectating') : 'Spectating';
         
         payload.carDetails = {
           vehicleMake: make,
           vehicleModel: model,
-          year: '2026',
-          buildType: 'Custom Tuner',
-          modifications: 'Showcase Build',
+          year: hasCar ? '2026' : 'N/A',
+          buildType: hasCar ? 'Custom Tuner' : 'N/A',
+          modifications: hasCar ? 'Showcase Build' : 'N/A',
           displayVehicle: carDisplay,
           enterCompetitions: carDisplay
         };
@@ -358,14 +359,14 @@ export default function RegistrationForm({ onSuccess, addToast }: RegistrationFo
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[9px] font-semibold uppercase text-gray-400 mb-1">
-                          Vehicle Year, Make & Model <span className="text-pink-500">*</span>
+                          Vehicle Year, Make & Model {carDisplay === 'Yes' && <span className="text-pink-500">*</span>}
                         </label>
                         <input
                           type="text"
-                          required={passions.includes('car_meet')}
+                          required={passions.includes('car_meet') && carDisplay === 'Yes'}
                           value={carMakeModel}
                           onChange={(e) => setCarMakeModel(e.target.value)}
-                          placeholder="e.g. 2004 Nissan 350Z"
+                          placeholder={carDisplay === 'Yes' ? "e.g. 2004 Nissan 350Z" : "Optional (Spectating)"}
                           className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white focus:outline-none focus:border-pink-500 text-xs"
                         />
                       </div>
