@@ -13,6 +13,8 @@ import {
   Sparkles,
   Gamepad2,
   Car,
+  Database,
+  CloudUpload,
   Calendar,
   Phone,
   MapPin,
@@ -168,6 +170,33 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
       });
     } finally {
       setDiagLoading(false);
+    }
+  };
+
+  const [syncLoading, setSyncLoading] = useState(false);
+
+  const handleSyncAll = async () => {
+    sounds.playSelect();
+    setSyncLoading(true);
+    try {
+      const res = await fetch('/api/sync-all-to-sheets', {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          addToast(data.message, 'success');
+          fetchDiagnostics();
+        } else {
+          addToast(data.error || 'Failed to sync with Google Sheets', 'error');
+        }
+      } else {
+        addToast(`Sync server error: status ${res.status}`, 'error');
+      }
+    } catch (err: any) {
+      addToast(`Sync connection failed: ${err.message || err}`, 'error');
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -543,15 +572,27 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
               </div>
             </div>
             
-            <button
-              type="button"
-              onClick={() => { sounds.playSelect(); fetchDiagnostics(); }}
-              disabled={diagLoading}
-              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-bold font-mono uppercase tracking-wider text-gray-300 border border-white/5 flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
-            >
-              <RefreshCw className={`w-3 h-3 ${diagLoading ? 'animate-spin' : ''}`} />
-              {diagLoading ? 'Auditing...' : 'Test Connection'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncAll}
+                disabled={syncLoading}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
+              >
+                <CloudUpload className={`w-3.5 h-3.5 ${syncLoading ? 'animate-bounce' : ''}`} />
+                {syncLoading ? 'Pushing...' : 'Push All to Google Sheets'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { sounds.playSelect(); fetchDiagnostics(); }}
+                disabled={diagLoading}
+                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-bold font-mono uppercase tracking-wider text-gray-300 border border-white/5 flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${diagLoading ? 'animate-spin' : ''}`} />
+                {diagLoading ? 'Auditing...' : 'Test Connection'}
+              </button>
+            </div>
           </div>
 
           {!sheetsDiag ? (

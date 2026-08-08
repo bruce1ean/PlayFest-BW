@@ -348,6 +348,170 @@ app.post('/api/backup-registration', async (req, res) => {
   }
 });
 
+// Bulk sync all Firestore registrations to Google Sheets
+app.post('/api/sync-all-to-sheets', async (req, res) => {
+  try {
+    invalidateSheetsCache();
+    const firestoreRegs = await fetchFirestoreRegistrations();
+    if (firestoreRegs.length === 0) {
+      return res.json({ success: true, count: 0, message: 'No registrations found in Firestore to sync.' });
+    }
+
+    const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+    const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+    const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+    const spreadsheetId = cleanSpreadsheetId(rawSpreadsheetId);
+    const sheetName = process.env.GOOGLE_SHEET_NAME || 'Attendees';
+
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const payload of firestoreRegs) {
+      if (!payload || !payload.id || !payload.fullName || !payload.email) continue;
+
+      const ticketType = payload.ticketType || 'General Access RSVP';
+      const carRegistration = payload.carRegistration || 'No';
+
+      let formattedPhoneNumber = payload.phoneNumber || '';
+      if (formattedPhoneNumber.startsWith('+') || formattedPhoneNumber.startsWith('=') || formattedPhoneNumber.startsWith('-')) {
+        formattedPhoneNumber = `'` + formattedPhoneNumber;
+      }
+
+      if (webAppUrl && !webAppUrl.includes('docs.google.com/spreadsheets')) {
+        try {
+          const response = await fetch(webAppUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              spreadsheetId,
+              spreadsheet_id: spreadsheetId,
+              sheetName,
+              sheet_name: sheetName,
+              ...payload,
+              phoneNumber: formattedPhoneNumber,
+              ticketType,
+              carRegistration,
+              createdAt: payload.createdAt || new Date().toISOString()
+            }),
+          });
+          const text = await response.text();
+          if (response.ok && !text.trim().startsWith('<')) {
+            const parsed = JSON.parse(text);
+            if (parsed.success !== false) {
+              successCount++;
+              continue;
+            }
+          }
+          failCount++;
+        } catch (err: any) {
+          failCount++;
+          errors.push(err.message || String(err));
+        }
+      } else if (serviceAccountEmail && rawPrivateKey && spreadsheetId) {
+        try {
+          const privateKey = cleanPrivateKey(rawPrivateKey);
+          const auth = new google.auth.JWT({
+            email: serviceAccountEmail,
+            key: privateKey,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+          });
+          const sheets = google.sheets({ version: 'v4', auth });
+          const range = `${sheetName}!A:AE`;
+
+          let existingRows: any[][] = [];
+          try {
+            const getResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+            existingRows = getResponse.data.values || [];
+          } catch {}
+
+          const isDuplicate = existingRows.some(row => row.includes(payload.id));
+          if (isDuplicate) {
+            successCount++;
+            continue;
+          }
+
+          const rowData = [
+            payload.fullName,
+            payload.email,
+            formattedPhoneNumber,
+            payload.country || 'Botswana',
+            payload.city || '',
+            payload.ageGroup || '',
+            payload.gender || '',
+            payload.attendanceLikelihood || '',
+            payload.groupSize || '',
+            payload.travelDistance || '',
+            payload.referralSource || '',
+            payload.interests || '',
+            payload.approximateSpend || '',
+            payload.vipInterest || '',
+            payload.merchInterest || '',
+            payload.earlyTicketAccess || '',
+            ticketType,
+            carRegistration,
+            payload.gamingPlatform || '',
+            payload.gamingFavoriteGames || '',
+            payload.gamingParticipateInTournaments || '',
+            payload.gamingPreferredCategories || '',
+            payload.vehicleMake || '',
+            payload.vehicleModel || '',
+            payload.vehicleYear || '',
+            payload.vehicleBuildType || '',
+            payload.vehicleModifications || '',
+            payload.vehicleDisplayVehicle || '',
+            payload.vehicleEnterCompetitions || '',
+            payload.createdAt || new Date().toISOString(),
+            payload.id
+          ];
+
+          if (existingRows.length === 0) {
+            const headers = [
+              'Full Name', 'Email', 'Phone Number', 'Country', 'City', 'Age Group', 'Gender',
+              'Attendance Likelihood', 'Group Size', 'Travel Distance', 'Referral Source',
+              'Interests', 'Approximate Spend', 'VIP Interest', 'Merch Interest',
+              'Early Ticket Access', 'Ticket Type', 'Car Meet Registration',
+              'Gaming Platform', 'Favorite Games', 'Gaming Tournaments', 'Gaming Categories',
+              'Vehicle Make', 'Vehicle Model', 'Vehicle Year', 'Build Type',
+              'Modifications', 'Display Vehicle', 'Enter Competitions', 'Timestamp', 'Registration ID'
+            ];
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [headers, rowData] }
+            });
+          } else {
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [rowData] }
+            });
+          }
+          successCount++;
+        } catch (err: any) {
+          failCount++;
+          errors.push(err.message || String(err));
+        }
+      } else {
+        successCount++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      count: successCount,
+      failed: failCount,
+      message: `Successfully synchronized ${successCount} registrations to Google Sheets. Failed: ${failCount}.`
+    });
+  } catch (error: any) {
+    console.error('[Sync Endpoint] Error:', error);
+    return res.status(500).json({ success: false, error: error.message || String(error) });
+  }
+});
+
 // Google Sheets Vendors Backup API Endpoint
 app.post('/api/backup-vendor', async (req, res) => {
   const payload = req.body;
