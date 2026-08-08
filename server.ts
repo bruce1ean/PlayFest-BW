@@ -1113,50 +1113,95 @@ app.get('/api/registrations', async (req, res) => {
       return res.json({ success: true, registrations: [] });
     }
 
-    const headers = rows[0];
-    const getVal = (row: any[], headerName: string, fallbackIdx: number, defaultVal: string = '') => {
-      const idx = headers.indexOf(headerName);
-      if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '') {
-        return String(row[idx]).trim();
-      }
-      if (fallbackIdx >= 0 && fallbackIdx < row.length && row[fallbackIdx] !== undefined && row[fallbackIdx] !== null && String(row[fallbackIdx]).trim() !== '') {
-        return String(row[fallbackIdx]).trim();
-      }
-      return defaultVal;
-    };
+    const headers = rows[0] || [];
+    const isLegacyFormat = !headers.includes('City') && !headers.includes('Country');
 
     const registrations = rows.slice(1).map((row, i) => {
-      const id = getVal(row, 'Registration ID', 30, `reg_sheets_${i}_${Date.now()}`);
-      const fullName = getVal(row, 'Full Name', 0, 'Attendee');
-      const email = getVal(row, 'Email', 1, 'no-email@example.com');
-      const phoneNumber = getVal(row, 'Phone Number', 2, '');
-      const country = getVal(row, 'Country', 3, 'Botswana');
-      const city = getVal(row, 'City', 4, 'Gaborone');
-      const ageGroup = getVal(row, 'Age Group', 5, '25-34');
-      const gender = getVal(row, 'Gender', 6, 'Not specified');
-      const attendanceLikelihood = getVal(row, 'Attendance Likelihood', 7, 'Definitely');
-      const groupSize = getVal(row, 'Group Size', 8, 'Just Me');
-      const travelDistance = getVal(row, 'Travel Distance', 9, 'Within my city');
-      const referralSource = getVal(row, 'Referral Source', 10, 'Other');
-      const interestsStr = getVal(row, 'Interests', 11, '');
-      const approximateSpend = getVal(row, 'Approximate Spend', 12, 'P200–P500');
-      const vipInterest = getVal(row, 'VIP Interest', 13, 'No');
-      const merchInterest = getVal(row, 'Merch Interest', 14, 'No');
-      const earlyTicketAccess = getVal(row, 'Early Ticket Access', 15, 'No');
-      const ticketType = getVal(row, 'Ticket Type', 16, 'General Access');
-      const carRegistration = getVal(row, 'Car Meet Registration', 17, 'No');
-      const gamingPlatform = getVal(row, 'Gaming Platform', 18, '');
-      const favoriteGames = getVal(row, 'Favorite Games', 19, '');
-      const participateInTournaments = getVal(row, 'Gaming Tournaments', 20, '');
-      const preferredCategoriesStr = getVal(row, 'Gaming Categories', 21, '');
-      const vehicleMake = getVal(row, 'Vehicle Make', 22, '');
-      const vehicleModel = getVal(row, 'Vehicle Model', 23, '');
-      const vehicleYear = getVal(row, 'Vehicle Year', 24, '');
-      const buildType = getVal(row, 'Build Type', 25, '');
-      const modifications = getVal(row, 'Modifications', 26, '');
-      const displayVehicle = getVal(row, 'Display Vehicle', 27, '');
-      const enterCompetitions = getVal(row, 'Enter Competitions', 28, '');
-      const createdAt = getVal(row, 'Timestamp', 29, new Date().toISOString());
+      let id = `reg_sheets_${i}_${Date.now()}`;
+      let fullName = 'Attendee';
+      let email = 'no-email@example.com';
+      let phoneNumber = '';
+      let country = 'Botswana';
+      let city = 'Gaborone';
+      let ageGroup = '25-34';
+      let gender = 'Not specified';
+      let attendanceLikelihood = 'Definitely';
+      let groupSize = 'Just Me';
+      let travelDistance = 'Within my city';
+      let referralSource = 'Other';
+      let interestsStr = '';
+      let approximateSpend = 'P200–P500';
+      let vipInterest = 'No';
+      let merchInterest = 'No';
+      let earlyTicketAccess = 'No';
+      let ticketType = 'General Access';
+      let carRegistration = 'No';
+      let gamingPlatform = '';
+      let favoriteGames = '';
+      let participateInTournaments = '';
+      let preferredCategoriesStr = '';
+      let vehicleMake = '';
+      let vehicleModel = '';
+      let vehicleYear = '';
+      let buildType = '';
+      let modifications = '';
+      let displayVehicle = '';
+      let enterCompetitions = '';
+      let createdAt = new Date().toISOString();
+
+      if (isLegacyFormat || row.length <= 8) {
+        fullName = row[0] || 'Attendee';
+        email = row[1] || 'no-email@example.com';
+        phoneNumber = row[2] || '';
+        ticketType = row[3] || 'General Access';
+        carRegistration = row[4] || 'No';
+        createdAt = row[5] || new Date().toISOString();
+        id = row[6] || `reg_sheets_${i}`;
+        vipInterest = ticketType.toLowerCase().includes('vip') ? 'Yes' : 'No';
+      } else {
+        const getVal = (headerName: string, fallbackIdx: number, defaultVal: string = '') => {
+          const idx = headers.indexOf(headerName);
+          if (idx !== -1 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '') {
+            return String(row[idx]).trim();
+          }
+          if (!headers.length && fallbackIdx >= 0 && fallbackIdx < row.length && row[fallbackIdx] !== undefined && row[fallbackIdx] !== null && String(row[fallbackIdx]).trim() !== '') {
+            return String(row[fallbackIdx]).trim();
+          }
+          return defaultVal;
+        };
+
+        id = getVal('Registration ID', 30, `reg_sheets_${i}_${Date.now()}`);
+        fullName = getVal('Full Name', 0, 'Attendee');
+        email = getVal('Email', 1, 'no-email@example.com');
+        phoneNumber = getVal('Phone Number', 2, '');
+        country = getVal('Country', 3, 'Botswana');
+        city = getVal('City', 4, 'Gaborone');
+        ageGroup = getVal('Age Group', 5, '25-34');
+        gender = getVal('Gender', 6, 'Not specified');
+        attendanceLikelihood = getVal('Attendance Likelihood', 7, 'Definitely');
+        groupSize = getVal('Group Size', 8, 'Just Me');
+        travelDistance = getVal('Travel Distance', 9, 'Within my city');
+        referralSource = getVal('Referral Source', 10, 'Other');
+        interestsStr = getVal('Interests', 11, '');
+        approximateSpend = getVal('Approximate Spend', 12, 'P200–P500');
+        vipInterest = getVal('VIP Interest', 13, 'No');
+        merchInterest = getVal('Merch Interest', 14, 'No');
+        earlyTicketAccess = getVal('Early Ticket Access', 15, 'No');
+        ticketType = getVal('Ticket Type', 16, 'General Access');
+        carRegistration = getVal('Car Meet Registration', 17, 'No');
+        gamingPlatform = getVal('Gaming Platform', 18, '');
+        favoriteGames = getVal('Favorite Games', 19, '');
+        participateInTournaments = getVal('Gaming Tournaments', 20, '');
+        preferredCategoriesStr = getVal('Gaming Categories', 21, '');
+        vehicleMake = getVal('Vehicle Make', 22, '');
+        vehicleModel = getVal('Vehicle Model', 23, '');
+        vehicleYear = getVal('Vehicle Year', 24, '');
+        buildType = getVal('Build Type', 25, '');
+        modifications = getVal('Modifications', 26, '');
+        displayVehicle = getVal('Display Vehicle', 27, '');
+        enterCompetitions = getVal('Enter Competitions', 28, '');
+        createdAt = getVal('Timestamp', 29, new Date().toISOString());
+      }
 
       let interests: string[] = [];
       if (interestsStr) {

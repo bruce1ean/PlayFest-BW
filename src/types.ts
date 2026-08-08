@@ -22,6 +22,8 @@ export interface AttendeeRegistration {
   vipInterest: 'Yes' | 'Maybe' | 'No';
   merchInterest: 'Yes' | 'Maybe' | 'No';
   earlyTicketAccess: 'Yes' | 'No';
+  ticketType?: string;
+  carRegistration?: string;
   
   // Conditionally added if "gaming" selected
   gamingDetails?: {

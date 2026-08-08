@@ -395,14 +395,27 @@ export const storage = {
           const data = await response.json();
           if (data && data.success && Array.isArray(data.registrations)) {
             const sheetRegs = data.registrations as AttendeeRegistration[];
-            for (const item of sheetRegs) {
-              if (item && (item.fullName || item.email)) {
-                const key = getKey(item);
+            for (const rawItem of sheetRegs) {
+              if (rawItem && (rawItem.fullName || rawItem.email)) {
+                const isCarReg = rawItem.carRegistration && !String(rawItem.carRegistration).toLowerCase().includes('no');
+                const normalizedItem: AttendeeRegistration = {
+                  ...rawItem,
+                  city: rawItem.city || 'Gaborone',
+                  country: rawItem.country || 'Botswana',
+                  ageGroup: rawItem.ageGroup || '25-34',
+                  attendanceLikelihood: rawItem.attendanceLikelihood || 'Definitely',
+                  groupSize: rawItem.groupSize || 'Just Me',
+                  interests: (rawItem.interests && rawItem.interests.length > 0) ? rawItem.interests : (
+                    isCarReg ? ['car_meet'] : ['general_access']
+                  ),
+                  vipInterest: rawItem.vipInterest || (rawItem.ticketType?.toLowerCase().includes('vip') ? 'Yes' : 'No')
+                };
+                const key = getKey(normalizedItem);
                 const existing = blendedMap.get(key);
                 if (existing) {
-                  blendedMap.set(key, { ...existing, ...item });
+                  blendedMap.set(key, { ...existing, ...normalizedItem });
                 } else {
-                  blendedMap.set(key, item);
+                  blendedMap.set(key, normalizedItem);
                 }
               }
             }
