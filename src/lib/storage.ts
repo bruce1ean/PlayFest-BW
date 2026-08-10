@@ -762,8 +762,11 @@ export const storage = {
   async resetRegistrations(): Promise<void> {
     // 1. Clear locally
     saveLocalData(STORAGE_REGISTRATIONS_KEY, []);
+    saveLocalData(STORAGE_VENDORS_KEY, []);
+    saveLocalData(STORAGE_SUBSCRIBERS_KEY, []);
+    saveLocalData(STORAGE_COMMENTS_KEY, []);
 
-    // 2. Clear Google Sheets via API
+    // 2. Clear Google Sheets and server-side Firestore via API
     try {
       const response = await fetch('/api/reset-registrations', {
         method: 'POST',
@@ -778,15 +781,18 @@ export const storage = {
       console.error('[Storage] Error calling reset-registrations API:', err);
     }
 
-    // 3. Clear Firestore collection if active
+    // 3. Clear Firestore collections if active on client
     if (useFirebase && db) {
-      try {
-        const qSnap = await getDocs(collection(db, 'registrations'));
-        const deletePromises = qSnap.docs.map((docSnap) => deleteDoc(doc(db, 'registrations', docSnap.id)));
-        await Promise.all(deletePromises);
-        console.log('[Storage] Successfully cleared registrations in Firestore.');
-      } catch (err) {
-        console.error('[Storage] Failed to clear registrations in Firestore:', err);
+      const collections = ['registrations', 'vendors', 'subscribers', 'comments'];
+      for (const colName of collections) {
+        try {
+          const qSnap = await getDocs(collection(db, colName));
+          const deletePromises = qSnap.docs.map((docSnap) => deleteDoc(doc(db, colName, docSnap.id)));
+          await Promise.all(deletePromises);
+          console.log(`[Storage] Successfully cleared ${colName} in Firestore on client.`);
+        } catch (err) {
+          console.error(`[Storage] Failed to clear ${colName} in Firestore on client:`, err);
+        }
       }
     }
   }

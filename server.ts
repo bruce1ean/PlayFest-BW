@@ -10,7 +10,7 @@ import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
+import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
 
 const app = express();
 const PORT = 3000;
@@ -107,6 +107,23 @@ async function saveFirestoreComment(comment: any): Promise<boolean> {
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving comment ${comment.id} to Firestore:`, err.message || err);
+    return false;
+  }
+}
+
+async function clearFirestoreCollection(collectionName: string): Promise<boolean> {
+  if (!serverDb) return false;
+  try {
+    const snap = await firestoreGetDocs(firestoreCollection(serverDb, collectionName));
+    const promises: Promise<any>[] = [];
+    snap.forEach((d) => {
+      promises.push(firestoreDeleteDoc(firestoreDoc(serverDb, collectionName, d.id)));
+    });
+    await Promise.all(promises);
+    console.log(`[Server Database] Successfully cleared collection ${collectionName} in Firestore.`);
+    return true;
+  } catch (err: any) {
+    console.warn(`[Server Database] Error clearing collection ${collectionName} in Firestore:`, err.message || err);
     return false;
   }
 }
@@ -1267,6 +1284,22 @@ app.post('/api/reset-registrations', async (req, res) => {
   console.log('[Sheets Database] Received request to reset all registrations.');
   invalidateSheetsCache();
 
+  // 1. Clear Firestore collections on the server
+  let firestoreReset = false;
+  if (serverDb) {
+    try {
+      const p1 = clearFirestoreCollection('registrations');
+      const p2 = clearFirestoreCollection('vendors');
+      const p3 = clearFirestoreCollection('subscribers');
+      const p4 = clearFirestoreCollection('comments');
+      await Promise.all([p1, p2, p3, p4]);
+      firestoreReset = true;
+      console.log('[Server Database] Cleared registrations, vendors, subscribers, and comments from Firestore.');
+    } catch (fsErr: any) {
+      console.warn('[Server Database] Failed to clear collections in Firestore:', fsErr.message || fsErr);
+    }
+  }
+
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
   const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
@@ -1275,7 +1308,12 @@ app.post('/api/reset-registrations', async (req, res) => {
 
   if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
     console.log('[Sheets Database] Service account config missing for reset-registrations.');
-    return res.json({ success: true, message: 'Local reset successful (Sheets not configured).' });
+    return res.json({ 
+      success: true, 
+      message: firestoreReset 
+        ? 'Database reset successful (Firestore cleared, Sheets not configured).' 
+        : 'Database reset successful (Local cleared, Cloud/Sheets not configured).' 
+    });
   }
 
   try {
@@ -1306,7 +1344,10 @@ app.post('/api/reset-registrations', async (req, res) => {
     }
 
     console.log('[Sheets Database] Successfully cleared Google Sheets registrations and vendors.');
-    return res.json({ success: true, message: 'Google Sheets registrations reset successfully.' });
+    return res.json({ 
+      success: true, 
+      message: 'Google Sheets and Firestore database reset successfully.' 
+    });
   } catch (error: any) {
     console.error('[Sheets Database] Failed to clear Google Sheets:', error);
     return res.status(500).json({
