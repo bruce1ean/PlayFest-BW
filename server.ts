@@ -9,36 +9,34 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
+import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
 
 const app = express();
 const PORT = 3000;
 
-// Initialize Server-Side Firestore using Firebase Admin SDK for reliable cross-device sync
+// Initialize Server-Side Firestore using standard Firebase client SDK for reliable cross-device sync
 let serverDb: any = null;
 try {
   const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (firebaseConfig && firebaseConfig.projectId) {
-      const fbApp = getApps().length === 0 ? initializeApp({
-        projectId: firebaseConfig.projectId
-      }) : getApp();
-      serverDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId || '(default)');
-      console.log('[Server Database] Firebase Admin Firestore initialized on server.');
+      const fbApp = getFirebaseApps().length ? getFirebaseApp() : initFirebaseApp(firebaseConfig);
+      serverDb = getFirebaseFirestore(fbApp, firebaseConfig.firestoreDatabaseId || '(default)');
+      console.log('[Server Database] Firebase Firestore initialized on server using Web SDK.');
     }
   }
 } catch (fbErr: any) {
-  console.warn('[Server Database] Could not initialize Firebase Admin on server:', fbErr.message || fbErr);
+  console.warn('[Server Database] Could not initialize Firebase on server:', fbErr.message || fbErr);
 }
 
 async function fetchFirestoreRegistrations(): Promise<any[]> {
   if (!serverDb) return [];
   try {
-    const snap = await serverDb.collection('registrations').get();
+    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'registrations'));
     const list: any[] = [];
-    snap.forEach((d: any) => {
+    snap.forEach((d) => {
       list.push({ id: d.id, ...d.data() });
     });
     console.log(`[Server Database] Successfully fetched ${list.length} registrations from Firestore.`);
@@ -52,7 +50,7 @@ async function fetchFirestoreRegistrations(): Promise<any[]> {
 async function saveFirestoreRegistration(reg: any): Promise<boolean> {
   if (!serverDb || !reg || !reg.id) return false;
   try {
-    await serverDb.collection('registrations').doc(reg.id).set(reg);
+    await firestoreSetDoc(firestoreDoc(serverDb, 'registrations', reg.id), reg);
     console.log(`[Server Database] Successfully saved registration ${reg.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -64,9 +62,9 @@ async function saveFirestoreRegistration(reg: any): Promise<boolean> {
 async function fetchFirestoreVendors(): Promise<any[]> {
   if (!serverDb) return [];
   try {
-    const snap = await serverDb.collection('vendors').get();
+    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'vendors'));
     const list: any[] = [];
-    snap.forEach((d: any) => {
+    snap.forEach((d) => {
       list.push({ id: d.id, ...d.data() });
     });
     console.log(`[Server Database] Successfully fetched ${list.length} vendors from Firestore.`);
@@ -80,7 +78,7 @@ async function fetchFirestoreVendors(): Promise<any[]> {
 async function saveFirestoreVendor(vendor: any): Promise<boolean> {
   if (!serverDb || !vendor || !vendor.id) return false;
   try {
-    await serverDb.collection('vendors').doc(vendor.id).set(vendor);
+    await firestoreSetDoc(firestoreDoc(serverDb, 'vendors', vendor.id), vendor);
     console.log(`[Server Database] Successfully saved vendor ${vendor.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -92,7 +90,7 @@ async function saveFirestoreVendor(vendor: any): Promise<boolean> {
 async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
   if (!serverDb || !sub || !sub.id) return false;
   try {
-    await serverDb.collection('subscribers').doc(sub.id).set(sub);
+    await firestoreSetDoc(firestoreDoc(serverDb, 'subscribers', sub.id), sub);
     console.log(`[Server Database] Successfully saved subscriber ${sub.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -104,7 +102,7 @@ async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
 async function saveFirestoreComment(comment: any): Promise<boolean> {
   if (!serverDb || !comment || !comment.id) return false;
   try {
-    await serverDb.collection('comments').doc(comment.id).set(comment);
+    await firestoreSetDoc(firestoreDoc(serverDb, 'comments', comment.id), comment);
     console.log(`[Server Database] Successfully saved comment ${comment.id} to Firestore.`);
     return true;
   } catch (err: any) {
