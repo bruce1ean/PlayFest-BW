@@ -60,13 +60,17 @@ if (!isPlaceholder) {
   try {
     app = getApps().length === 0 ? initializeApp(resolvedConfig) : getApp();
     try {
-      db = initializeFirestore(app, {
-        localCache: memoryLocalCache(),
-        experimentalForceLongPolling: true,
-        experimentalAutoDetectLongPolling: true
-      }, resolvedConfig.firestoreDatabaseId);
-    } catch (initErr: any) {
       db = getFirestore(app, resolvedConfig.firestoreDatabaseId);
+    } catch {
+      try {
+        db = initializeFirestore(app, {
+          localCache: memoryLocalCache(),
+          experimentalForceLongPolling: true,
+          experimentalAutoDetectLongPolling: true
+        }, resolvedConfig.firestoreDatabaseId);
+      } catch (initErr: any) {
+        db = getFirestore(app);
+      }
     }
     auth = getAuth(app);
     useFirebase = true;
@@ -542,6 +546,13 @@ export const storage = {
         });
     }
 
+    // Backup to server-side Firestore as a bulletproof proxy
+    fetch('/api/backup-subscriber', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSub)
+    }).catch(err => console.warn('Subscriber server backup failed:', err));
+
     // Trigger asynchronous email confirmation
     sendConfirmationEmail('subscriber', newSub);
 
@@ -685,6 +696,13 @@ export const storage = {
           console.error('Firestore Error saving comment, fallback to local retention:', error);
         });
     }
+
+    // Backup to server-side Firestore as a bulletproof proxy
+    fetch('/api/backup-comment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newComment)
+    }).catch(err => console.warn('Comment server backup failed:', err));
 
     return newComment;
   },

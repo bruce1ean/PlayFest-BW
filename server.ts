@@ -9,34 +9,36 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
-import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const app = express();
 const PORT = 3000;
 
-// Initialize Server-Side Firestore for reliable cross-device sync
+// Initialize Server-Side Firestore using Firebase Admin SDK for reliable cross-device sync
 let serverDb: any = null;
 try {
   const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (firebaseConfig && firebaseConfig.projectId) {
-      const fbApp = getFirebaseApps().length ? getFirebaseApp() : initFirebaseApp(firebaseConfig);
-      serverDb = getFirebaseFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
-      console.log('[Server Database] Firebase Firestore initialized on server.');
+      const fbApp = getApps().length === 0 ? initializeApp({
+        projectId: firebaseConfig.projectId
+      }) : getApp();
+      serverDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId || '(default)');
+      console.log('[Server Database] Firebase Admin Firestore initialized on server.');
     }
   }
-} catch (fbErr) {
-  console.warn('[Server Database] Could not initialize Firebase on server:', fbErr);
+} catch (fbErr: any) {
+  console.warn('[Server Database] Could not initialize Firebase Admin on server:', fbErr.message || fbErr);
 }
 
 async function fetchFirestoreRegistrations(): Promise<any[]> {
   if (!serverDb) return [];
   try {
-    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'registrations'));
+    const snap = await serverDb.collection('registrations').get();
     const list: any[] = [];
-    snap.forEach((d) => {
+    snap.forEach((d: any) => {
       list.push({ id: d.id, ...d.data() });
     });
     console.log(`[Server Database] Successfully fetched ${list.length} registrations from Firestore.`);
@@ -50,11 +52,63 @@ async function fetchFirestoreRegistrations(): Promise<any[]> {
 async function saveFirestoreRegistration(reg: any): Promise<boolean> {
   if (!serverDb || !reg || !reg.id) return false;
   try {
-    await firestoreSetDoc(firestoreDoc(serverDb, 'registrations', reg.id), reg);
+    await serverDb.collection('registrations').doc(reg.id).set(reg);
     console.log(`[Server Database] Successfully saved registration ${reg.id} to Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving registration ${reg.id} to Firestore:`, err.message || err);
+    return false;
+  }
+}
+
+async function fetchFirestoreVendors(): Promise<any[]> {
+  if (!serverDb) return [];
+  try {
+    const snap = await serverDb.collection('vendors').get();
+    const list: any[] = [];
+    snap.forEach((d: any) => {
+      list.push({ id: d.id, ...d.data() });
+    });
+    console.log(`[Server Database] Successfully fetched ${list.length} vendors from Firestore.`);
+    return list;
+  } catch (err: any) {
+    console.warn('[Server Database] Error fetching vendors from Firestore:', err.message || err);
+    return [];
+  }
+}
+
+async function saveFirestoreVendor(vendor: any): Promise<boolean> {
+  if (!serverDb || !vendor || !vendor.id) return false;
+  try {
+    await serverDb.collection('vendors').doc(vendor.id).set(vendor);
+    console.log(`[Server Database] Successfully saved vendor ${vendor.id} to Firestore.`);
+    return true;
+  } catch (err: any) {
+    console.warn(`[Server Database] Error saving vendor ${vendor.id} to Firestore:`, err.message || err);
+    return false;
+  }
+}
+
+async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
+  if (!serverDb || !sub || !sub.id) return false;
+  try {
+    await serverDb.collection('subscribers').doc(sub.id).set(sub);
+    console.log(`[Server Database] Successfully saved subscriber ${sub.id} to Firestore.`);
+    return true;
+  } catch (err: any) {
+    console.warn(`[Server Database] Error saving subscriber ${sub.id} to Firestore:`, err.message || err);
+    return false;
+  }
+}
+
+async function saveFirestoreComment(comment: any): Promise<boolean> {
+  if (!serverDb || !comment || !comment.id) return false;
+  try {
+    await serverDb.collection('comments').doc(comment.id).set(comment);
+    console.log(`[Server Database] Successfully saved comment ${comment.id} to Firestore.`);
+    return true;
+  } catch (err: any) {
+    console.warn(`[Server Database] Error saving comment ${comment.id} to Firestore:`, err.message || err);
     return false;
   }
 }
@@ -529,6 +583,11 @@ app.post('/api/backup-vendor', async (req, res) => {
     });
   }
 
+  // Ensure record is saved in Firestore directly from server
+  saveFirestoreVendor(payload).catch(err => {
+    console.warn('[Database API] Async server firestore write error for vendor:', err);
+  });
+
   // Extract config
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -708,6 +767,26 @@ app.post('/api/backup-vendor', async (req, res) => {
       error: 'Google Sheets API error: ' + (error.message || error),
     });
   }
+});
+
+// POST Backup Newsletter Subscriber to Firestore
+app.post('/api/backup-subscriber', async (req, res) => {
+  const payload = req.body;
+  if (!payload || !payload.id || !payload.email) {
+    return res.status(400).json({ success: false, error: 'Invalid subscriber payload.' });
+  }
+  const saved = await saveFirestoreSubscriber(payload);
+  return res.json({ success: saved });
+});
+
+// POST Backup Comment to Firestore
+app.post('/api/backup-comment', async (req, res) => {
+  const payload = req.body;
+  if (!payload || !payload.id || !payload.fullName || !payload.text) {
+    return res.status(400).json({ success: false, error: 'Invalid comment payload.' });
+  }
+  const saved = await saveFirestoreComment(payload);
+  return res.json({ success: saved });
 });
 
 // ---------------------------------------------------------------------------
@@ -1531,6 +1610,24 @@ app.get('/api/vendors', async (req, res) => {
     });
   }
 
+  const blendedMap = new Map<string, any>();
+  const getKey = (v: any) => {
+    if (v.id && !v.id.startsWith('vendor_sheets_')) {
+      return v.id;
+    }
+    return v.email ? `email:${v.email.toLowerCase().trim()}` : (v.id || `vendor_${Math.random()}`);
+  };
+
+  // 1. Fetch from Firestore (cloud database)
+  const firestoreVendors = await fetchFirestoreVendors();
+  for (const item of firestoreVendors) {
+    if (item && (item.businessName || item.email)) {
+      blendedMap.set(getKey(item), item);
+    }
+  }
+
+  // 2. Fetch from Google Sheets
+  let sheetsVendors: any[] = [];
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -1542,7 +1639,7 @@ app.get('/api/vendors', async (req, res) => {
     try {
       if (!webAppUrl.includes('docs.google.com/spreadsheets')) {
         console.log('[Sheets Database] WebApp URL configured. Fetching vendors via Apps Script Web App...');
-        const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}type=vendors&spreadsheetId=${encodeURIComponent(spreadsheetId)}&spreadsheet_id=${encodeURIComponent(spreadsheetId)}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
+        const fetchUrl = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}type=vendors&spreadsheetId=${encodeURIComponent(spreadsheetId || '')}&spreadsheet_id=${encodeURIComponent(spreadsheetId || '')}&sheetName=${encodeURIComponent(sheetName)}&sheet_name=${encodeURIComponent(sheetName)}`;
         const response = await fetch(fetchUrl, {
           method: 'GET',
           headers: {
@@ -1561,98 +1658,98 @@ app.get('/api/vendors', async (req, res) => {
 
             if (data && data.success && Array.isArray(data.vendors)) {
               console.log(`[Sheets Database] Successfully fetched ${data.vendors.length} vendors via Apps Script Web App.`);
-              vendorsCache = {
-                vendors: data.vendors,
-                timestamp: Date.now()
-              };
-              return res.json({
-                success: true,
-                vendors: data.vendors,
-              });
+              sheetsVendors = data.vendors;
             }
           }
         }
       }
     } catch (err: any) {
-      console.log('[Sheets Database] Web App fetch bypassed for vendors.');
+      console.log('[Sheets Database] Web App fetch bypassed for vendors.', err.message || err);
     }
   }
 
-  if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
-    console.log('[Sheets Database] Service account config missing for GET vendors. Returning empty list.');
-    return res.json({ success: true, vendors: [] });
-  }
+  if (serviceAccountEmail && rawPrivateKey && spreadsheetId) {
+    try {
+      const privateKey = cleanPrivateKey(rawPrivateKey);
+      const auth = new google.auth.JWT({
+        email: serviceAccountEmail,
+        key: privateKey,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
 
-  try {
-    const privateKey = cleanPrivateKey(rawPrivateKey);
-    const auth = new google.auth.JWT({
-      email: serviceAccountEmail,
-      key: privateKey,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
+      const sheets = google.sheets({ version: 'v4', auth });
+      const range = `${sheetName}!A:L`;
 
-    const sheets = google.sheets({ version: 'v4', auth });
-    const range = `${sheetName}!A:L`;
+      const getResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+      });
 
-    const getResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range,
-    });
+      const rows = getResponse.data.values || [];
+      if (rows.length > 1) {
+        const headers = rows[0];
+        const bizNameIndex = headers.indexOf('Business Name');
+        const contactIndex = headers.indexOf('Contact Person');
+        const numberIndex = headers.indexOf('Contact Number');
+        const emailIndex = headers.indexOf('Email');
+        const categoryIndex = headers.indexOf('Category');
+        const productsIndex = headers.indexOf('Products / Services');
+        const socialIndex = headers.indexOf('Social Media Links');
+        const sizeIndex = headers.indexOf('Stall Size');
+        const electricityIndex = headers.indexOf('Electricity Required');
+        const additionalIndex = headers.indexOf('Additional Requests');
+        const timestampIndex = headers.indexOf('Timestamp');
+        const idIndex = headers.indexOf('Vendor ID');
 
-    const rows = getResponse.data.values || [];
-    if (rows.length <= 1) {
-      return res.json({ success: true, vendors: [] });
+        sheetsVendors = rows.slice(1).map((row, i) => {
+          return {
+            id: idIndex !== -1 ? row[idIndex] : (row[11] || `vendor_sheets_${i}`),
+            businessName: bizNameIndex !== -1 ? row[bizNameIndex] : (row[0] || ''),
+            contactPerson: contactIndex !== -1 ? row[contactIndex] : (row[1] || ''),
+            contactNumber: numberIndex !== -1 ? row[numberIndex] : (row[2] || ''),
+            email: emailIndex !== -1 ? row[emailIndex] : (row[3] || ''),
+            category: categoryIndex !== -1 ? row[categoryIndex] : (row[4] || 'Other'),
+            productsOrServices: productsIndex !== -1 ? row[productsIndex] : (row[5] || ''),
+            socialMediaLinks: socialIndex !== -1 ? row[socialIndex] : (row[6] || ''),
+            stallSize: sizeIndex !== -1 ? row[sizeIndex] : (row[7] || 'Small (3m x 3m)'),
+            electricityRequired: electricityIndex !== -1 ? row[electricityIndex] : (row[8] || 'No'),
+            additionalRequests: additionalIndex !== -1 ? row[additionalIndex] : (row[9] || ''),
+            createdAt: timestampIndex !== -1 ? row[timestampIndex] : (row[10] || new Date().toISOString()),
+            country: 'Botswana'
+          };
+        });
+      }
+    } catch (error: any) {
+      console.error('[Sheets Database] Failed to query vendors from Google Sheets:', error.message || error);
     }
-
-    const headers = rows[0];
-    const bizNameIndex = headers.indexOf('Business Name');
-    const contactIndex = headers.indexOf('Contact Person');
-    const numberIndex = headers.indexOf('Contact Number');
-    const emailIndex = headers.indexOf('Email');
-    const categoryIndex = headers.indexOf('Category');
-    const productsIndex = headers.indexOf('Products / Services');
-    const socialIndex = headers.indexOf('Social Media Links');
-    const sizeIndex = headers.indexOf('Stall Size');
-    const electricityIndex = headers.indexOf('Electricity Required');
-    const additionalIndex = headers.indexOf('Additional Requests');
-    const timestampIndex = headers.indexOf('Timestamp');
-    const idIndex = headers.indexOf('Vendor ID');
-
-    const vendors = rows.slice(1).map((row, i) => {
-      return {
-        id: idIndex !== -1 ? row[idIndex] : (row[11] || `vendor_sheets_${i}`),
-        businessName: bizNameIndex !== -1 ? row[bizNameIndex] : (row[0] || ''),
-        contactPerson: contactIndex !== -1 ? row[contactIndex] : (row[1] || ''),
-        contactNumber: numberIndex !== -1 ? row[numberIndex] : (row[2] || ''),
-        email: emailIndex !== -1 ? row[emailIndex] : (row[3] || ''),
-        category: categoryIndex !== -1 ? row[categoryIndex] : (row[4] || 'Other'),
-        productsOrServices: productsIndex !== -1 ? row[productsIndex] : (row[5] || ''),
-        socialMediaLinks: socialIndex !== -1 ? row[socialIndex] : (row[6] || ''),
-        stallSize: sizeIndex !== -1 ? row[sizeIndex] : (row[7] || 'Small (3m x 3m)'),
-        electricityRequired: electricityIndex !== -1 ? row[electricityIndex] : (row[8] || 'No'),
-        additionalRequests: additionalIndex !== -1 ? row[additionalIndex] : (row[9] || ''),
-        createdAt: timestampIndex !== -1 ? row[timestampIndex] : (row[10] || new Date().toISOString()),
-        country: 'Botswana'
-      };
-    });
-
-    vendorsCache = {
-      vendors,
-      timestamp: Date.now()
-    };
-
-    return res.json({
-      success: true,
-      vendors,
-    });
-  } catch (error: any) {
-    console.error('[Sheets Database] Failed to query vendors from Google Sheets:', error);
-    return res.json({
-      success: true,
-      vendors: [],
-      error: error.message || error
-    });
   }
+
+  // Merge Sheets records into Blended Map
+  for (const rawItem of sheetsVendors) {
+    if (rawItem && (rawItem.businessName || rawItem.email)) {
+      const key = getKey(rawItem);
+      const existing = blendedMap.get(key);
+      if (existing) {
+        blendedMap.set(key, { ...existing, ...rawItem });
+      } else {
+        blendedMap.set(key, rawItem);
+      }
+    }
+  }
+
+  const allVendors = Array.from(blendedMap.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+
+  vendorsCache = {
+    vendors: allVendors,
+    timestamp: Date.now()
+  };
+
+  return res.json({
+    success: true,
+    vendors: allVendors,
+  });
 });
 
 // GET Google Sheets diagnostics/telemetry status
