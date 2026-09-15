@@ -180,6 +180,9 @@ app.post('/api/backup-registration', async (req, res) => {
     });
   }
 
+  // Log system alert for the new registration
+  logSystemAlert('info', 'Registration', 'New Attendee Registered', `Attendee ${payload.fullName} (${payload.email}) completed registration.`, payload);
+
   // Ensure record is saved in Firestore directly from server
   saveFirestoreRegistration(payload).catch(err => {
     console.warn('[Database API] Async server firestore write error:', err);
@@ -252,12 +255,14 @@ app.post('/api/backup-registration', async (req, res) => {
       }
 
       console.log('[Sheets Database] Successfully saved registration via Apps Script Web App:', payload.id);
+      logSystemAlert('info', 'Google Sheets', 'Sheets Web App Backup Success', `Successfully backed up registration ${payload.id} (${payload.fullName}) to Google Sheets via Apps Script Web App.`);
       return res.status(200).json({
         success: true,
         message: 'Registration successfully written to Google Sheets via Apps Script.',
       });
     } catch (err: any) {
       console.warn('[Sheets Database] Failed to save via Apps Script Web App, attempting fallbacks:', err.message || err);
+      logSystemAlert('warning', 'Google Sheets', 'Sheets Web App Sync Failure', `Failed to write registration ${payload.id} via Apps Script. Attempting Service Account fallback. Error: ${err.message || err}`, err.message || err);
       // Fall through to other storage types gracefully instead of failing the HTTP request with a 500 status!
     }
   }
@@ -265,6 +270,7 @@ app.post('/api/backup-registration', async (req, res) => {
   // 2. Fallback to Google Cloud Service Account method if configured
   if (!serviceAccountEmail || !rawPrivateKey || !spreadsheetId) {
     console.log('[Sheets Database] Google Sheets configuration (either Web App URL or Service Account) is missing or has failed. Running in simulation mode.');
+    logSystemAlert('warning', 'Google Sheets', 'Sheets Backup Simulation Fallback', `Google Sheets configuration is incomplete or missing. Registration ${payload.id} (${payload.fullName}) was saved in simulation mode.`);
     return res.status(200).json({
       success: true,
       message: 'Google Sheets backup simulation succeeded. (Please configure GOOGLE_SPREADSHEET_ID and service account credentials to write to real sheets).',
@@ -403,6 +409,7 @@ app.post('/api/backup-registration', async (req, res) => {
       console.log('[Sheets Database] Successfully appended registration to Google Sheets:', regId);
     }
 
+    logSystemAlert('info', 'Google Sheets', 'Sheets Backup Success', `Successfully appended registration ${payload.id} (${payload.fullName}) to Google Sheets via Service Account API.`);
     return res.status(200).json({
       success: true,
       message: 'Registration successfully written to Google Sheets.',
@@ -410,6 +417,7 @@ app.post('/api/backup-registration', async (req, res) => {
 
   } catch (error: any) {
     console.error('[Sheets Database] Failed to append registration to Google Sheets:', error);
+    logSystemAlert('error', 'Google Sheets', 'Sheets Backup Error', `Failed to append registration ${payload.id} (${payload.fullName}) to Google Sheets. Error: ${error.message || error}`, error.message || error);
     return res.status(500).json({
       success: false,
       error: 'Google Sheets API error: ' + (error.message || error),
@@ -569,6 +577,13 @@ app.post('/api/sync-all-to-sheets', async (req, res) => {
       }
     }
 
+    logSystemAlert(
+      failCount > 0 ? 'warning' : 'info',
+      'Google Sheets',
+      'Bulk Synchronization Completed',
+      `Bulk synchronized ${successCount} registrations to Google Sheets. Failed: ${failCount}.` + (errors.length ? ` Errors: ${errors.slice(0, 3).join(', ')}` : '')
+    );
+
     return res.json({
       success: true,
       count: successCount,
@@ -577,6 +592,7 @@ app.post('/api/sync-all-to-sheets', async (req, res) => {
     });
   } catch (error: any) {
     console.error('[Sync Endpoint] Error:', error);
+    logSystemAlert('error', 'Google Sheets', 'Bulk Synchronization Failed', `An error occurred during bulk sync to Google Sheets: ${error.message || error}`, error.message || error);
     return res.status(500).json({ success: false, error: error.message || String(error) });
   }
 });
@@ -841,6 +857,139 @@ function getMailTransporter() {
 
   return mailTransporter;
 }
+
+// ---------------------------------------------------------------------------
+// Alerts & Diagnostics Engine
+// ---------------------------------------------------------------------------
+interface SystemAlert {
+  id: string;
+  timestamp: string;
+  severity: 'info' | 'warning' | 'error';
+  module: string;
+  title: string;
+  message: string;
+  details?: any;
+}
+
+const systemAlerts: SystemAlert[] = [];
+
+async function sendAdminErrorEmail(alert: SystemAlert) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  if (!adminEmail || !adminEmail.trim()) {
+    console.log('[Alert System] No ADMIN_EMAIL or SMTP_USER configured. Skipping email alert dispatch.');
+    return;
+  }
+  
+  try {
+    const transporter = getMailTransporter();
+    if (transporter === 'SIMULATION') {
+      console.log(`[Alert System Simulation] Administrative error alert email generated:`, alert.title);
+      return;
+    }
+    
+    const fromHeader = process.env.SMTP_FROM || 'PlayFest Diagnostics <noreply@playfest2026.bw>';
+    await transporter.sendMail({
+      from: fromHeader,
+      to: adminEmail.trim(),
+      subject: `🚨 SYSTEM ERROR ALERT: ${alert.title}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 20px; background-color: #fef2f2; }
+            .card { border: 2px solid #ef4444; border-radius: 8px; padding: 24px; max-width: 650px; background-color: #ffffff; margin: 0 auto; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1); }
+            .header { color: #dc2626; border-bottom: 2px solid #fee2e2; padding-bottom: 12px; margin-top: 0; font-size: 20px; display: flex; align-items: center; }
+            p { font-size: 14px; color: #4b5563; }
+            .alert-details { background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 6px; padding: 15px; margin: 15px 0; font-family: monospace; font-size: 13px; color: #991b1b; white-space: pre-wrap; word-break: break-all; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            td { padding: 10px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
+            .label { font-weight: bold; width: 30%; color: #374151; }
+            .value { color: #111827; }
+            .footer { font-size: 11px; color: #9ca3af; margin-top: 25px; text-align: center; border-top: 1px solid #f3f4f6; padding-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2 class="header">🚨 PlayFest 2026: System Error Alert</h2>
+            <p><strong>Warning:</strong> An unexpected system error or diagnostic event has been triggered in the PlayFest platform. Please review the details below:</p>
+            
+            <table>
+              <tr>
+                <td class="label">Event Title</td>
+                <td class="value" style="font-weight: bold; color: #dc2626;">${alert.title}</td>
+              </tr>
+              <tr>
+                <td class="label">Module Source</td>
+                <td class="value" style="font-family: monospace;">${alert.module}</td>
+              </tr>
+              <tr>
+                <td class="label">Timestamp</td>
+                <td class="value">${alert.timestamp}</td>
+              </tr>
+              <tr>
+                <td class="label">Description</td>
+                <td class="value">${alert.message}</td>
+              </tr>
+            </table>
+            
+            ${alert.details ? `
+              <p><strong>Error Payload / Technical Context:</strong></p>
+              <div class="alert-details">${alert.details}</div>
+            ` : ''}
+            
+            <p style="margin-top: 20px;">
+              Please access the <strong>Admin Dashboard</strong> on the PlayFest platform and navigate to the <strong>Diagnostics & Alerts</strong> panel for complete logs and health metrics.
+            </p>
+            
+            <div class="footer">
+              This is an automated diagnostics message. Do not reply directly to this email.
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    });
+    console.log(`[Alert System] Successfully sent admin email error notification for:`, alert.title);
+  } catch (err: any) {
+    console.error(`[Alert System] Failed to send admin alert email via SMTP:`, err.message || err);
+  }
+}
+
+function logSystemAlert(severity: 'info' | 'warning' | 'error', moduleName: string, title: string, message: string, details?: any) {
+  const alert: SystemAlert = {
+    id: `alert_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    severity,
+    module: moduleName,
+    title,
+    message,
+    details: details ? (typeof details === 'string' ? details : JSON.stringify(details, null, 2)) : undefined
+  };
+  
+  systemAlerts.unshift(alert);
+  if (systemAlerts.length > 100) {
+    systemAlerts.pop();
+  }
+  
+  console.log(`[SYSTEM ALERT] [${severity.toUpperCase()}] [${moduleName}] ${title}: ${message}`);
+  
+  if (severity === 'error') {
+    sendAdminErrorEmail(alert).catch(err => {
+      console.warn('[Alert System] Failed to send error alert email:', err.message || err);
+    });
+  }
+}
+
+// Startup check 2s after launch
+setTimeout(() => {
+  logSystemAlert(
+    serverDb ? 'info' : 'warning',
+    'Firestore',
+    serverDb ? 'Cloud Database Active' : 'Cloud Database Disconnected',
+    serverDb ? 'Firebase Firestore is successfully connected and listening.' : 'Firebase Firestore Web SDK failed to connect. Falling back to local/simulation mode.'
+  );
+}, 2000);
 
 // POST Send Confirmation Email
 app.post('/api/send-confirmation', async (req, res) => {
@@ -1344,17 +1493,50 @@ app.post('/api/reset-registrations', async (req, res) => {
     }
 
     console.log('[Sheets Database] Successfully cleared Google Sheets registrations and vendors.');
+    logSystemAlert('warning', 'Database Admin', 'Databases Cleaned/Reset', 'Administrator triggered complete purge of Firestore collections and Google Sheets rows.');
     return res.json({ 
       success: true, 
       message: 'Google Sheets and Firestore database reset successfully.' 
     });
   } catch (error: any) {
     console.error('[Sheets Database] Failed to clear Google Sheets:', error);
+    logSystemAlert('error', 'Database Admin', 'Database Reset Failed', `Purge of Firestore or Google Sheets failed with an error: ${error.message || error}`, error.message || error);
     return res.status(500).json({
       success: false,
       error: 'Google Sheets API error: ' + (error.message || error),
     });
   }
+});
+
+// GET System Alerts and Diagnostic Status
+app.get('/api/system-alerts', (req, res) => {
+  const firebaseConfigured = !!serverDb;
+  const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+  const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawPrivateKey = process.env.GOOGLE_PRIVATE_KEY;
+  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  
+  let sheetsStatus = 'SIMULATION';
+  if (webAppUrl) {
+    sheetsStatus = 'APPS_SCRIPT';
+  } else if (serviceAccountEmail && rawPrivateKey && spreadsheetId) {
+    sheetsStatus = 'SERVICE_ACCOUNT';
+  }
+  
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const mailStatus = (smtpHost && smtpUser) ? 'GMAIL_SMTP' : 'SIMULATION';
+  
+  res.json({
+    success: true,
+    alerts: systemAlerts,
+    diagnostics: {
+      firestore: firebaseConfigured ? 'CONNECTED' : 'DISCONNECTED',
+      googleSheets: sheetsStatus,
+      smtp: mailStatus,
+      adminEmail: process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'N/A'
+    }
+  });
 });
 
 // GET Registrations from Firestore & Google Sheets
@@ -1923,10 +2105,14 @@ async function setupRouting() {
     });
   }
 
-  // Bind to port 3000 and 0.0.0.0
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] Express full-stack listening on http://0.0.0.0:${PORT}`);
-  });
+  // Bind to port 3000 and 0.0.0.0 (skip on Vercel serverless environment)
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[Server] Express full-stack listening on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
 setupRouting();
+
+export default app;

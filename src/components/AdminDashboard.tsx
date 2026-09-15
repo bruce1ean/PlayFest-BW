@@ -30,7 +30,10 @@ import {
   Clock,
   Info,
   Search,
-  Filter
+  Filter,
+  Bell,
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 import { AttendeeRegistration } from '../types';
 import { storage } from '../lib/storage';
@@ -119,9 +122,91 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
     }
   };
 
+  // System alerts & diagnostic states
+  const [systemAlerts, setSystemAlerts] = useState<any[]>([]);
+  const [subsystems, setSubsystems] = useState<any>({
+    firestore: 'DISCONNECTED',
+    googleSheets: 'SIMULATION',
+    smtp: 'SIMULATION',
+    adminEmail: 'N/A'
+  });
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
+  const [notificationPermission, setNotificationPermission] = useState<string>('default');
+  const [lastAlertId, setLastAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      sounds.playSelect();
+      if (permission === 'granted') {
+        new Notification('PlayFest Botswana Diagnostics', {
+          body: 'System Alerts Enabled. You will now receive desktop alerts for registrations and database status!',
+          icon: 'https://cdn-icons-png.flaticon.com/512/190/190411.png'
+        });
+      }
+    }
+  };
+
+  const fetchAlertsAndDiagnostics = async (showNotification = false) => {
+    try {
+      setAlertsLoading(true);
+      const res = await fetch('/api/system-alerts');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          const fetchedAlerts = data.alerts || [];
+          setSystemAlerts(fetchedAlerts);
+          setSubsystems(data.diagnostics || { firestore: 'DISCONNECTED', googleSheets: 'SIMULATION', smtp: 'SIMULATION', adminEmail: 'N/A' });
+          
+          if (fetchedAlerts.length > 0) {
+            const newestAlert = fetchedAlerts[0];
+            setLastAlertId(prevId => {
+              if (prevId && prevId !== newestAlert.id && showNotification) {
+                if (newestAlert.severity === 'error') {
+                  sounds.playCancel(); // Play error sound cue
+                } else if (newestAlert.severity === 'warning') {
+                  sounds.playHover(); // Play warning tick sound cue
+                } else {
+                  sounds.playSuccess(); // Play attendee success chime cue!
+                }
+                
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                  new Notification(newestAlert.title, {
+                    body: newestAlert.message,
+                    icon: newestAlert.severity === 'error' ? 'https://cdn-icons-png.flaticon.com/512/564/564619.png' : 'https://cdn-icons-png.flaticon.com/512/190/190411.png'
+                  });
+                }
+              }
+              return newestAlert.id;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch system alerts and diagnostics:', err);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       loadData();
+      fetchAlertsAndDiagnostics(false);
+      
+      const interval = setInterval(() => {
+        fetchAlertsAndDiagnostics(true);
+      }, 10000);
+      
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
@@ -130,6 +215,7 @@ export default function AdminDashboard({ onClose, addToast }: AdminDashboardProp
       const allRegs = await storage.getRegistrations(true);
       setRegs(allRegs);
       fetchDiagnostics();
+      fetchAlertsAndDiagnostics(false);
     } catch (err) {
       addToast('Failed to load data', 'error');
     } finally {
@@ -892,6 +978,204 @@ function doPost(e) {
               )}
             </div>
           )}
+        </div>
+
+        {/* System Diagnostics & Live Alerts HUD */}
+        <div className="bg-black/60 border border-white/5 rounded-2xl p-6 shadow-xl relative overflow-hidden space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-pink-500/10 text-pink-400">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-pink-400 font-display flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" /> System Health & Live Alerts
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">Real-time telemetry diagnostics, background process monitoring, and immediate incident notification.</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {notificationPermission !== 'granted' ? (
+                <button
+                  type="button"
+                  onClick={requestNotificationPermission}
+                  className="px-3.5 py-1.5 rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-[10px] font-bold font-mono uppercase text-pink-400 border border-pink-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping" /> Enable Desktop Alerts
+                </button>
+              ) : (
+                <span className="px-3 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold font-mono uppercase border border-emerald-500/20 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Live Desktop Alerts Active
+                </span>
+              )}
+              
+              <button
+                type="button"
+                onClick={() => { sounds.playSelect(); fetchAlertsAndDiagnostics(false); }}
+                disabled={alertsLoading}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
+                title="Refresh diagnostics & alert stream"
+              >
+                <RefreshCw className={`w-4 h-4 ${alertsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Subsystem Connection Grids */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Firestore */}
+            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase font-mono tracking-wider text-gray-500 font-bold">Firestore Sync Pool</div>
+                <Database className={`w-4 h-4 ${subsystems.firestore === 'CONNECTED' ? 'text-emerald-400' : 'text-rose-500'}`} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white mt-1">
+                  {subsystems.firestore === 'CONNECTED' ? 'ACTIVE & SYNCED' : 'DISCONNECTED'}
+                </div>
+                <div className="text-[10px] font-mono text-gray-400 mt-1 flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${subsystems.firestore === 'CONNECTED' ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                  Firestore Cloud DB
+                </div>
+              </div>
+            </div>
+
+            {/* Google Sheets */}
+            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase font-mono tracking-wider text-gray-500 font-bold">Google Sheets Archiver</div>
+                <FileSpreadsheet className={`w-4 h-4 ${subsystems.googleSheets !== 'SIMULATION' ? 'text-emerald-400' : 'text-purple-400'}`} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white mt-1">
+                  {subsystems.googleSheets === 'APPS_SCRIPT' && 'APPS SCRIPT WEB APP'}
+                  {subsystems.googleSheets === 'SERVICE_ACCOUNT' && 'GOOGLE CLOUD API'}
+                  {subsystems.googleSheets === 'SIMULATION' && 'LOCAL SIMULATION'}
+                </div>
+                <div className="text-[10px] font-mono text-gray-400 mt-1 flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${subsystems.googleSheets !== 'SIMULATION' ? 'bg-emerald-400 animate-pulse' : 'bg-purple-500'}`} />
+                  {subsystems.googleSheets !== 'SIMULATION' ? 'Active Real-time Backup' : 'Offline simulation active'}
+                </div>
+              </div>
+            </div>
+
+            {/* SMTP Mail */}
+            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase font-mono tracking-wider text-gray-500 font-bold">Email Notification Agent</div>
+                <Mail className={`w-4 h-4 ${subsystems.smtp === 'GMAIL_SMTP' ? 'text-emerald-400' : 'text-purple-400'}`} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white mt-1 font-mono text-xs truncate">
+                  {subsystems.smtp === 'GMAIL_SMTP' ? 'GMAIL SMTP ACTIVE' : 'CONSOLE SIMULATION'}
+                </div>
+                <div className="text-[10px] font-mono text-gray-400 mt-1 flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${subsystems.smtp === 'GMAIL_SMTP' ? 'bg-emerald-400' : 'bg-purple-500'}`} />
+                  Attendee Confirmation Mail
+                </div>
+              </div>
+            </div>
+
+            {/* Admin Notifications Destination */}
+            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase font-mono tracking-wider text-gray-500 font-bold">Emergency Alert Dispatcher</div>
+                <Activity className="w-4 h-4 text-pink-400" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white mt-1 truncate" title={subsystems.adminEmail}>
+                  {subsystems.adminEmail !== 'N/A' ? subsystems.adminEmail : 'NO TARGET CONFIGURED'}
+                </div>
+                <div className="text-[10px] font-mono text-gray-400 mt-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse" />
+                  Admin email recipient
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Diagnostic Feed / Log Stream */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-gray-400 font-bold flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-pink-400" /> Live Event and Incident Stream
+              </span>
+              <span className="text-[9px] font-mono text-gray-500 uppercase">showing last {systemAlerts.length} events</span>
+            </div>
+
+            <div className="max-h-[320px] overflow-y-auto space-y-2.5 pr-1.5 custom-scrollbar">
+              {systemAlerts.length === 0 ? (
+                <div className="p-8 text-center bg-white/2 rounded-xl border border-dashed border-white/5 flex flex-col items-center justify-center space-y-2">
+                  <CheckCircle className="w-8 h-8 text-emerald-400" />
+                  <p className="text-xs font-bold text-white font-mono uppercase">All Systems Optimal</p>
+                  <p className="text-[11px] text-gray-400 max-w-sm">No critical faults, warning incidents, or sync disruptions have been registered in this administration session.</p>
+                </div>
+              ) : (
+                systemAlerts.map((alert) => {
+                  const isExpanded = !!expandedAlerts[alert.id];
+                  return (
+                    <div 
+                      key={alert.id} 
+                      className={`p-3.5 rounded-xl border transition-all text-xs flex flex-col space-y-2 ${
+                        alert.severity === 'error' 
+                          ? 'bg-rose-500/5 border-rose-500/20 hover:border-rose-500/40 text-rose-100' 
+                          : alert.severity === 'warning'
+                            ? 'bg-amber-500/5 border-amber-500/15 hover:border-amber-500/30 text-amber-100'
+                            : 'bg-white/2 border-white/5 hover:border-white/10 text-gray-100'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex gap-2.5 items-start">
+                          <div className={`p-1.5 rounded-lg mt-0.5 ${
+                            alert.severity === 'error' 
+                              ? 'bg-rose-500/10 text-rose-400' 
+                              : alert.severity === 'warning'
+                                ? 'bg-amber-500/10 text-amber-400'
+                                : 'bg-cyan-500/10 text-cyan-400'
+                          }`}>
+                            {alert.severity === 'error' && <AlertTriangle className="w-3.5 h-3.5" />}
+                            {alert.severity === 'warning' && <AlertTriangle className="w-3.5 h-3.5" />}
+                            {alert.severity === 'info' && <Info className="w-3.5 h-3.5" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-white uppercase tracking-wide text-[11px]">{alert.title}</span>
+                              <span className="px-2 py-0.5 rounded bg-white/5 text-[9px] font-mono text-gray-400 uppercase tracking-wider">{alert.module}</span>
+                              {alert.severity === 'error' && (
+                                <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[8px] font-mono font-bold uppercase tracking-wider animate-pulse">Critical Fault</span>
+                              )}
+                            </div>
+                            <p className="text-gray-400 text-[11px] mt-1 leading-relaxed">{alert.message}</p>
+                          </div>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1.5">
+                          <span className="text-[9px] font-mono text-gray-500">
+                            {new Date(alert.timestamp).toLocaleTimeString()}
+                          </span>
+                          {alert.details && (
+                            <button
+                              type="button"
+                              onClick={() => { sounds.playSelect(); setExpandedAlerts(prev => ({ ...prev, [alert.id]: !prev[alert.id] })); }}
+                              className="text-[9px] font-mono text-pink-400 hover:text-pink-300 hover:underline cursor-pointer bg-transparent border-0 p-0"
+                            >
+                              {isExpanded ? '[- Hide Payload]' : '[+ View Payload]'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {alert.details && isExpanded && (
+                        <div className="p-3 bg-black/40 rounded-lg border border-white/5 font-mono text-[10px] text-gray-400 overflow-x-auto whitespace-pre-wrap break-all leading-normal max-h-[160px] custom-scrollbar">
+                          {alert.details}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Database List HUD */}
