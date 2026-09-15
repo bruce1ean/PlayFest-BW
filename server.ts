@@ -9,34 +9,36 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
-import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, collection as firestoreCollection, getDocs as firestoreGetDocs, doc as firestoreDoc, setDoc as firestoreSetDoc, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
+import { initializeApp as initAdminApp, getApps as getAdminApps, getApp as getAdminApp } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
 const app = express();
 const PORT = 3000;
 
-// Initialize Server-Side Firestore using standard Firebase client SDK for reliable cross-device sync
+// Initialize Server-Side Firestore using standard Firebase Admin SDK for reliable cross-device sync & ESM compatibility
 let serverDb: any = null;
 try {
   const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (firebaseConfig && firebaseConfig.projectId) {
-      const fbApp = getFirebaseApps().length ? getFirebaseApp() : initFirebaseApp(firebaseConfig);
-      serverDb = getFirebaseFirestore(fbApp, firebaseConfig.firestoreDatabaseId || '(default)');
-      console.log('[Server Database] Firebase Firestore initialized on server using Web SDK.');
+      const adminApp = getAdminApps().length ? getAdminApp() : initAdminApp({
+        projectId: firebaseConfig.projectId,
+      });
+      serverDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId || '(default)');
+      console.log('[Server Database] Firebase Firestore initialized on server using Admin SDK.');
     }
   }
 } catch (fbErr: any) {
-  console.warn('[Server Database] Could not initialize Firebase on server:', fbErr.message || fbErr);
+  console.warn('[Server Database] Could not initialize Firebase Admin on server:', fbErr.message || fbErr);
 }
 
 async function fetchFirestoreRegistrations(): Promise<any[]> {
   if (!serverDb) return [];
   try {
-    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'registrations'));
+    const snap = await serverDb.collection('registrations').get();
     const list: any[] = [];
-    snap.forEach((d) => {
+    snap.forEach((d: any) => {
       list.push({ id: d.id, ...d.data() });
     });
     console.log(`[Server Database] Successfully fetched ${list.length} registrations from Firestore.`);
@@ -50,7 +52,7 @@ async function fetchFirestoreRegistrations(): Promise<any[]> {
 async function saveFirestoreRegistration(reg: any): Promise<boolean> {
   if (!serverDb || !reg || !reg.id) return false;
   try {
-    await firestoreSetDoc(firestoreDoc(serverDb, 'registrations', reg.id), reg);
+    await serverDb.collection('registrations').doc(reg.id).set(reg);
     console.log(`[Server Database] Successfully saved registration ${reg.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -62,9 +64,9 @@ async function saveFirestoreRegistration(reg: any): Promise<boolean> {
 async function fetchFirestoreVendors(): Promise<any[]> {
   if (!serverDb) return [];
   try {
-    const snap = await firestoreGetDocs(firestoreCollection(serverDb, 'vendors'));
+    const snap = await serverDb.collection('vendors').get();
     const list: any[] = [];
-    snap.forEach((d) => {
+    snap.forEach((d: any) => {
       list.push({ id: d.id, ...d.data() });
     });
     console.log(`[Server Database] Successfully fetched ${list.length} vendors from Firestore.`);
@@ -78,7 +80,7 @@ async function fetchFirestoreVendors(): Promise<any[]> {
 async function saveFirestoreVendor(vendor: any): Promise<boolean> {
   if (!serverDb || !vendor || !vendor.id) return false;
   try {
-    await firestoreSetDoc(firestoreDoc(serverDb, 'vendors', vendor.id), vendor);
+    await serverDb.collection('vendors').doc(vendor.id).set(vendor);
     console.log(`[Server Database] Successfully saved vendor ${vendor.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -90,7 +92,7 @@ async function saveFirestoreVendor(vendor: any): Promise<boolean> {
 async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
   if (!serverDb || !sub || !sub.id) return false;
   try {
-    await firestoreSetDoc(firestoreDoc(serverDb, 'subscribers', sub.id), sub);
+    await serverDb.collection('subscribers').doc(sub.id).set(sub);
     console.log(`[Server Database] Successfully saved subscriber ${sub.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -102,7 +104,7 @@ async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
 async function saveFirestoreComment(comment: any): Promise<boolean> {
   if (!serverDb || !comment || !comment.id) return false;
   try {
-    await firestoreSetDoc(firestoreDoc(serverDb, 'comments', comment.id), comment);
+    await serverDb.collection('comments').doc(comment.id).set(comment);
     console.log(`[Server Database] Successfully saved comment ${comment.id} to Firestore.`);
     return true;
   } catch (err: any) {
@@ -114,10 +116,10 @@ async function saveFirestoreComment(comment: any): Promise<boolean> {
 async function clearFirestoreCollection(collectionName: string): Promise<boolean> {
   if (!serverDb) return false;
   try {
-    const snap = await firestoreGetDocs(firestoreCollection(serverDb, collectionName));
+    const snap = await serverDb.collection(collectionName).get();
     const promises: Promise<any>[] = [];
-    snap.forEach((d) => {
-      promises.push(firestoreDeleteDoc(firestoreDoc(serverDb, collectionName, d.id)));
+    snap.forEach((d: any) => {
+      promises.push(serverDb.collection(collectionName).doc(d.id).delete());
     });
     await Promise.all(promises);
     console.log(`[Server Database] Successfully cleared collection ${collectionName} in Firestore.`);
@@ -987,7 +989,7 @@ setTimeout(() => {
     serverDb ? 'info' : 'warning',
     'Firestore',
     serverDb ? 'Cloud Database Active' : 'Cloud Database Disconnected',
-    serverDb ? 'Firebase Firestore is successfully connected and listening.' : 'Firebase Firestore Web SDK failed to connect. Falling back to local/simulation mode.'
+    serverDb ? 'Firebase Firestore is successfully connected and listening.' : 'Firebase Firestore Admin SDK failed to connect. Falling back to local/simulation mode.'
   );
 }, 2000);
 
