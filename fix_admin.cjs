@@ -1,24 +1,66 @@
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+// 1. Import official Firebase Admin and Core components using CommonJS syntax
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
+const { getDatabase } = require('firebase-admin/database');
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyC2igVMfeDfVQOczi4kxsNIgmQV0j9cm_M",
-    authDomain: "playfestbw-2301a.firebaseapp.com",
-    databaseURL: "https://playfestbw-2301a-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "playfestbw-2301a",
-    storageBucket: "playfestbw-2301a.firebasestorage.app",
-    messagingSenderId: "525377597069",
-    appId: "1:525377597069:web:a2053a1d1d0e9117f17cc4",
-    measurementId: "G-WCJ0QWY6NG"
-  };
+// 2. Safely initialize the Firebase Admin SDK connection
+// It uses Environment Variables configured in Vercel to secure your database credentials
+const firebaseConfig = {
+  projectId: "playfestbw-2301a",
+  databaseURL: "https://firebaseio.com"
+};
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
+// Prevent duplicate initialization crashes during live hot-reloads
+if (!getApps().length) {
+  initializeApp({
+    ...firebaseConfig,
+    // Add credential configuration here if using a service account JSON string in Vercel env
+    // credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY))
+  });
+}
+
+const db = getDatabase();
+
+/**
+ * CommonJS Controller / API Endpoint Module
+ * Fetches all real-time registrants from the database.
+ */
+async function getRegistrationsHandler(req, res) {
+  try {
+    const registrationsRef = db.ref('registrations');
+    
+    // Perform a clean server-side read snapshot
+    const snapshot = await registrationsRef.once('value');
+    const data = snapshot.val();
+    
+    if (!data) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    // Format the unique Firebase object map cleanly into a structured array
+    const formattedList = Object.keys(data).map(key => ({
+      id: key,
+      name: data[key].name || "Anonymous",
+      email: data[key].email || "N/A",
+      timestamp: data[key].timestamp || null
+    })).sort((a, b) => b.timestamp - a.timestamp); // Show latest registrants first
+
+    return res.status(200).json({
+      success: true,
+      count: formattedList.length,
+      data: formattedList
+    });
+
+  } catch (error) {
+    console.error("Administrative Dashboard API Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      error: "Internal server compilation error or database connection timeout." 
+    });
+  }
+}
+
+// 3. Export using CommonJS module pattern
+module.exports = {
+  getRegistrationsHandler,
+  dbInstance: db
+};
