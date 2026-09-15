@@ -1,15 +1,11 @@
 {
   "name": "play-fest-bw",
   "version": "1.0.0",
-  "description": "PlayFest BW Registration Platform",
-  "main": "index.html",
+  "private": true,
   "scripts": {
-    "build": "echo 'No build step required'"
+    "build": "mkdir -p dist && cp index.html dist/ 2>/dev/null || true"
   },
   "dependencies": {
     "firebase-admin": "^12.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
