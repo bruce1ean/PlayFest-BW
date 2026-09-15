@@ -1,9 +1,24 @@
-const fs = require('fs');
-let code = fs.readFileSync('src/components/AdminDashboard.tsx', 'utf8');
-code = code.replace(/\{ id: 'vendors', label: `Stall bookings \[\$\{totalVendors\}\]`, icon: <Store className="w-4 h-4" \/> \},/g, '');
-code = code.replace(/\| 'vendors'/g, '');
-code = code.replace(/const totalVendors = .*?;/g, '');
-code = code.replace(/<div className="text-\[10px\].*?Food \/ Brand Vendors<\/div>\s*<div className="text-2xl.*?\{totalVendors\}<\/div>/g, '');
-code = code.replace(/\{\/\* VENDORS APPLICATIONS TAB \*\/\}\s*\{activeSubTab === 'vendors'[\s\S]*?\}\)/, '');
-code = code.replace(/\} else if \(type === 'vendors'\) \{[\s\S]*?filename = `PlayFest2026_Vendors/g, 'filename = `PlayFest2026_Vendors'); // Hacky, let's do a better replace
-fs.writeFileSync('src/components/AdminDashboard.tsx', code);
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyC2igVMfeDfVQOczi4kxsNIgmQV0j9cm_M",
+    authDomain: "playfestbw-2301a.firebaseapp.com",
+    databaseURL: "https://playfestbw-2301a-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "playfestbw-2301a",
+    storageBucket: "playfestbw-2301a.firebasestorage.app",
+    messagingSenderId: "525377597069",
+    appId: "1:525377597069:web:a2053a1d1d0e9117f17cc4",
+    measurementId: "G-WCJ0QWY6NG"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
