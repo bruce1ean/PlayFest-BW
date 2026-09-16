@@ -1,11 +1,12 @@
 {
   "projectId": "halogen-gate-07854",
-  "appId": "1:1058952150992:web:3b5e27e5681a22625e83d5",
+  "appId": "1:1058952150992:web:42c3ace7339da0bc5e83d5",
   "apiKey": "AIzaSyDDIeoSgsqIYDLYr7kG643yWEEDJ5KLx_4",
   "authDomain": "halogen-gate-07854.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-playfest2026audi-b8377a57-3fce-4ab6-bc76-405fa9a5e788",
   "storageBucket": "halogen-gate-07854.firebasestorage.app",
   "messagingSenderId": "1058952150992",
   "measurementId": "",
-  "oAuthClientId": "1058952150992-7fuq8rnsg3snto7ju9s5mkq1nd023gbh.apps.googleusercontent.com"
+  "oAuthClientId": "1058952150992-7fuq8rnsg3snto7ju9s5mkq1nd023gbh.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

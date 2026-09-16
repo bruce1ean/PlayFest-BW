@@ -11,121 +11,242 @@ import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import { initializeApp as initAdminApp, getApps as getAdminApps, getApp as getAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
+import { getFirestore as getClientFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const app = express();
 const PORT = 3000;
 
-// Initialize Server-Side Firestore using standard Firebase Admin SDK for reliable cross-device sync & ESM compatibility
+// Initialize Server-Side Firestore using standard Firebase Admin SDK and fallback Client SDK
+let adminDb: any = null;
+let clientDb: any = null;
 let serverDb: any = null;
+let useClientSdk = false;
+
 try {
   const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (firebaseConfig && firebaseConfig.projectId) {
-      const adminApp = getAdminApps().length ? getAdminApp() : initAdminApp({
-        projectId: firebaseConfig.projectId,
-      });
-      serverDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId || '(default)');
-      console.log('[Server Database] Firebase Firestore initialized on server using Admin SDK.');
+      // 1. Attempt Admin SDK Initialization
+      try {
+        const adminApp = getAdminApps().length ? getAdminApp() : initAdminApp({
+          projectId: firebaseConfig.projectId,
+        });
+        adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId || '(default)');
+        serverDb = adminDb;
+        console.log('[Server Database] Firebase Admin SDK initialized successfully.');
+      } catch (adminErr: any) {
+        console.warn('[Server Database] Admin SDK initialization skipped or failed:', adminErr.message || adminErr);
+      }
+
+      // 2. Attempt Web Client SDK Initialization
+      try {
+        const clientApp = getClientApps().length ? getClientApp() : initClientApp(firebaseConfig);
+        clientDb = getClientFirestore(clientApp, firebaseConfig.firestoreDatabaseId || '(default)');
+        if (!serverDb) {
+          serverDb = clientDb;
+        }
+        console.log('[Server Database] Firebase Web JS Client SDK initialized successfully.');
+      } catch (clientErr: any) {
+        console.warn('[Server Database] Web Client SDK initialization failed:', clientErr.message || clientErr);
+      }
     }
   }
 } catch (fbErr: any) {
-  console.warn('[Server Database] Could not initialize Firebase Admin on server:', fbErr.message || fbErr);
+  console.warn('[Server Database] Could not initialize Firebase database connections:', fbErr.message || fbErr);
 }
 
 async function fetchFirestoreRegistrations(): Promise<any[]> {
-  if (!serverDb) return [];
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return [];
   try {
-    const snap = await serverDb.collection('registrations').get();
     const list: any[] = [];
-    snap.forEach((d: any) => {
-      list.push({ id: d.id, ...d.data() });
-    });
+    if (isFallback) {
+      const snap = await getDocs(collection(dbToUse, 'registrations'));
+      snap.forEach((d: any) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+    } else {
+      const snap = await dbToUse.collection('registrations').get();
+      snap.forEach((d: any) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+    }
     console.log(`[Server Database] Successfully fetched ${list.length} registrations from Firestore.`);
     return list;
   } catch (err: any) {
     console.warn('[Server Database] Error fetching registrations from Firestore:', err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return fetchFirestoreRegistrations();
+    }
     return [];
   }
 }
 
 async function saveFirestoreRegistration(reg: any): Promise<boolean> {
-  if (!serverDb || !reg || !reg.id) return false;
+  if (!reg || !reg.id) return false;
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return false;
   try {
-    await serverDb.collection('registrations').doc(reg.id).set(reg);
+    if (isFallback) {
+      await setDoc(doc(dbToUse, 'registrations', reg.id), reg);
+    } else {
+      await dbToUse.collection('registrations').doc(reg.id).set(reg);
+    }
     console.log(`[Server Database] Successfully saved registration ${reg.id} to Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving registration ${reg.id} to Firestore:`, err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return saveFirestoreRegistration(reg);
+    }
     return false;
   }
 }
 
 async function fetchFirestoreVendors(): Promise<any[]> {
-  if (!serverDb) return [];
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return [];
   try {
-    const snap = await serverDb.collection('vendors').get();
     const list: any[] = [];
-    snap.forEach((d: any) => {
-      list.push({ id: d.id, ...d.data() });
-    });
+    if (isFallback) {
+      const snap = await getDocs(collection(dbToUse, 'vendors'));
+      snap.forEach((d: any) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+    } else {
+      const snap = await dbToUse.collection('vendors').get();
+      snap.forEach((d: any) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+    }
     console.log(`[Server Database] Successfully fetched ${list.length} vendors from Firestore.`);
     return list;
   } catch (err: any) {
     console.warn('[Server Database] Error fetching vendors from Firestore:', err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return fetchFirestoreVendors();
+    }
     return [];
   }
 }
 
 async function saveFirestoreVendor(vendor: any): Promise<boolean> {
-  if (!serverDb || !vendor || !vendor.id) return false;
+  if (!vendor || !vendor.id) return false;
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return false;
   try {
-    await serverDb.collection('vendors').doc(vendor.id).set(vendor);
+    if (isFallback) {
+      await setDoc(doc(dbToUse, 'vendors', vendor.id), vendor);
+    } else {
+      await dbToUse.collection('vendors').doc(vendor.id).set(vendor);
+    }
     console.log(`[Server Database] Successfully saved vendor ${vendor.id} to Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving vendor ${vendor.id} to Firestore:`, err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return saveFirestoreVendor(vendor);
+    }
     return false;
   }
 }
 
 async function saveFirestoreSubscriber(sub: any): Promise<boolean> {
-  if (!serverDb || !sub || !sub.id) return false;
+  if (!sub || !sub.id) return false;
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return false;
   try {
-    await serverDb.collection('subscribers').doc(sub.id).set(sub);
+    if (isFallback) {
+      await setDoc(doc(dbToUse, 'subscribers', sub.id), sub);
+    } else {
+      await dbToUse.collection('subscribers').doc(sub.id).set(sub);
+    }
     console.log(`[Server Database] Successfully saved subscriber ${sub.id} to Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving subscriber ${sub.id} to Firestore:`, err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return saveFirestoreSubscriber(sub);
+    }
     return false;
   }
 }
 
 async function saveFirestoreComment(comment: any): Promise<boolean> {
-  if (!serverDb || !comment || !comment.id) return false;
+  if (!comment || !comment.id) return false;
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return false;
   try {
-    await serverDb.collection('comments').doc(comment.id).set(comment);
+    if (isFallback) {
+      await setDoc(doc(dbToUse, 'comments', comment.id), comment);
+    } else {
+      await dbToUse.collection('comments').doc(comment.id).set(comment);
+    }
     console.log(`[Server Database] Successfully saved comment ${comment.id} to Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error saving comment ${comment.id} to Firestore:`, err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return saveFirestoreComment(comment);
+    }
     return false;
   }
 }
 
 async function clearFirestoreCollection(collectionName: string): Promise<boolean> {
-  if (!serverDb) return false;
+  const isFallback = useClientSdk || !adminDb;
+  const dbToUse = isFallback ? clientDb : adminDb;
+  if (!dbToUse) return false;
   try {
-    const snap = await serverDb.collection(collectionName).get();
     const promises: Promise<any>[] = [];
-    snap.forEach((d: any) => {
-      promises.push(serverDb.collection(collectionName).doc(d.id).delete());
-    });
+    if (isFallback) {
+      const snap = await getDocs(collection(dbToUse, collectionName));
+      snap.forEach((d: any) => {
+        promises.push(deleteDoc(doc(dbToUse, collectionName, d.id)));
+      });
+    } else {
+      const snap = await dbToUse.collection(collectionName).get();
+      snap.forEach((d: any) => {
+        promises.push(dbToUse.collection(collectionName).doc(d.id).delete());
+      });
+    }
     await Promise.all(promises);
     console.log(`[Server Database] Successfully cleared collection ${collectionName} in Firestore.`);
     return true;
   } catch (err: any) {
     console.warn(`[Server Database] Error clearing collection ${collectionName} in Firestore:`, err.message || err);
+    if (!isFallback && err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission'))) {
+      console.log('[Server Database] Switching to Web Client SDK fallback due to Admin permission error...');
+      useClientSdk = true;
+      serverDb = clientDb;
+      return clearFirestoreCollection(collectionName);
+    }
     return false;
   }
 }
